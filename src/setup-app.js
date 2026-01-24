@@ -56,8 +56,14 @@
   function refreshStatus() {
     setStatus('Loading...');
     return httpJson('/setup/api/status').then(function (j) {
-      setStatus(j.configured ? 'Configured - open /clawdbot' : 'Not configured - run setup below');
+      var ver = j.clawdbotVersion ? (' | ' + j.clawdbotVersion) : '';
+      setStatus((j.configured ? 'Configured - open /clawdbot' : 'Not configured - run setup below') + ver);
       renderAuth(j.authGroups || []);
+      // If channels are unsupported, surface it for debugging.
+      if (j.channelsAddHelp && j.channelsAddHelp.indexOf('telegram') === -1) {
+        logEl.textContent += '\nNote: this clawdbot build does not list telegram in `channels add --help`.\n';
+      }
+
     }).catch(function (e) {
       setStatus('Error: ' + String(e));
     });

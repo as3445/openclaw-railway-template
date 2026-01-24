@@ -33,7 +33,9 @@ Recommended:
 
 Optional:
 - `CLAWDBOT_GATEWAY_TOKEN` — if not set, the wrapper generates one (not ideal). In a template, set it using a generated secret.
-- `CLAWDBOT_VERSION` — if you pin via Docker build arg.
+
+Notes:
+- This template pins Clawdbot to a known-good version by default via Docker build arg `CLAWDBOT_VERSION`.
 
 4) Enable **Public Networking** (HTTP). Railway will assign a domain.
 5) Deploy.

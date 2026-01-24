@@ -21,7 +21,7 @@ RUN npm install --omit=dev && npm cache clean --force
 
 # Install clawdbot CLI
 # Pin if desired: docker build --build-arg CLAWDBOT_VERSION=2026.1.23
-ARG CLAWDBOT_VERSION=latest
+ARG CLAWDBOT_VERSION=2026.1.23
 
 # Sanity check: git must exist for installs that pull git-based deps.
 RUN which git && git --version
