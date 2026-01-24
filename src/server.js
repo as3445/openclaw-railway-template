@@ -8,7 +8,8 @@ import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
 
-const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
+// Railway commonly sets PORT=8080 for HTTP services.
+const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
 const STATE_DIR = process.env.CLAWDBOT_STATE_DIR?.trim() || path.join(os.homedir(), ".clawdbot");
 const WORKSPACE_DIR = process.env.CLAWDBOT_WORKSPACE_DIR?.trim() || path.join(STATE_DIR, "workspace");
 

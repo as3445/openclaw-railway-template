@@ -30,7 +30,7 @@ RUN npm i -g "clawdbot@${CLAWDBOT_VERSION}" && npm cache clean --force
 
 COPY src ./src
 
-# Railway provides PORT. Wrapper listens on PORT; gateway runs internally.
-EXPOSE 3000
+# Railway provides PORT (often 8080). Wrapper listens on PORT; gateway runs internally.
+EXPOSE 8080
 
 CMD ["node", "src/server.js"]
