@@ -124,7 +124,14 @@ app.use(express.json({ limit: "1mb" }));
 // Minimal health endpoint for Railway.
 app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
 
+app.get("/setup/app.js", requireSetupAuth, (_req, res) => {
+  // Serve JS for /setup (kept external to avoid inline encoding/template issues)
+  res.type("application/javascript");
+  res.send(fs.readFileSync(path.join(process.cwd(), "src", "setup-app.js"), "utf8"));
+});
+
 app.get("/setup", requireSetupAuth, (_req, res) => {
+  // No inline <script>: serve JS from /setup/app.js to avoid any encoding/template-literal issues.
   res.type("html").send(`<!doctype html>
 <html>
 <head>
@@ -148,6 +155,11 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   <div class="card">
     <h2>Status</h2>
     <div id="status">Loading...</div>
+    <div style="margin-top: 0.75rem">
+      <a href="/clawdbot" target="_blank">Open Clawdbot UI</a>
+      &nbsp;|&nbsp;
+      <a href="/setup/export" target="_blank">Download backup (.tar.gz)</a>
+    </div>
   </div>
 
   <div class="card">
@@ -189,75 +201,12 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   <div class="card">
     <h2>3) Run onboarding</h2>
     <button id="run">Run setup</button>
+    <button id="reset" style="background:#444; margin-left:0.5rem">Reset setup</button>
     <pre id="log" style="white-space:pre-wrap"></pre>
+    <p class="muted">Reset deletes the Clawdbot config file so you can rerun onboarding.</p>
   </div>
 
-  <div class="card">
-    <h2>Backup / Export</h2>
-    <p class="muted">After setup, export your state to migrate off Railway without losing config or memory.</p>
-    <a href="/setup/export" target="_blank">Download backup (.tar.gz)</a>
-  </div>
-
-  <script>
-    const statusEl = document.getElementById('status');
-    const authGroupEl = document.getElementById('authGroup');
-    const authChoiceEl = document.getElementById('authChoice');
-
-    async function refreshStatus() {
-      const res = await fetch('/setup/api/status', { credentials: 'same-origin' });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        statusEl.textContent = 'Error loading status (' + res.status + '): ' + (text || res.statusText);
-        return;
-      }
-      const j = await res.json();
-      statusEl.textContent = j.configured ? 'Configured - open /clawdbot' : 'Not configured - run setup below';
-      renderAuth(j.authGroups);
-    }
-
-    function renderAuth(groups) {
-      authGroupEl.innerHTML = '';
-      for (const g of groups) {
-        const opt = document.createElement('option');
-        opt.value = g.value;
-        opt.textContent = g.label + (g.hint ? ' - ' + g.hint : '');
-        authGroupEl.appendChild(opt);
-      }
-      authGroupEl.onchange = () => {
-        const sel = groups.find(x => x.value === authGroupEl.value);
-        authChoiceEl.innerHTML = '';
-        for (const o of (sel?.options ?? [])) {
-          const opt = document.createElement('option');
-          opt.value = o.value;
-          opt.textContent = o.label + (o.hint ? ' - ' + o.hint : '');
-          authChoiceEl.appendChild(opt);
-        }
-      };
-      authGroupEl.onchange();
-    }
-
-    document.getElementById('run').onclick = async () => {
-      const payload = {
-        flow: document.getElementById('flow').value,
-        authChoice: authChoiceEl.value,
-        authSecret: document.getElementById('authSecret').value,
-        telegramToken: document.getElementById('telegramToken').value,
-        discordToken: document.getElementById('discordToken').value,
-        slackBotToken: document.getElementById('slackBotToken').value,
-        slackAppToken: document.getElementById('slackAppToken').value
-      };
-      const log = document.getElementById('log');
-      log.textContent = 'Running...\n';
-      const res = await fetch('/setup/api/run', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-      const text = await res.text();
-      let j;
-      try { j = JSON.parse(text); } catch { j = { ok: false, output: text }; }
-      log.textContent += j.output || JSON.stringify(j, null, 2);
-      await refreshStatus();
-    };
-
-    refreshStatus().catch(e => { statusEl.textContent = 'Error: ' + e; });
-  </script>
+  <script src="/setup/app.js"></script>
 </body>
 </html>`);
 });
@@ -401,7 +350,7 @@ function runCmd(cmd, args, opts = {}) {
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
   if (isConfigured()) {
     startGatewayIfNeeded();
-    return res.json({ ok: true, output: "Already configured.\n" });
+    return res.json({ ok: true, output: "Already configured.\nUse Reset setup if you want to rerun onboarding.\n" });
   }
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -453,6 +402,17 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     ok,
     output: `${onboard.output}${extra}`
   });
+});
+
+app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
+  // Minimal reset: delete the config file so /setup can rerun.
+  // Keep credentials/sessions/workspace by default.
+  try {
+    fs.rmSync(configPath(), { force: true });
+    res.type("text/plain").send("OK - deleted config file. You can rerun setup now.");
+  } catch (err) {
+    res.status(500).type("text/plain").send(String(err));
+  }
 });
 
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
