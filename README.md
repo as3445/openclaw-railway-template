@@ -45,6 +45,21 @@ Then:
 - Complete setup
 - Visit `https://<your-app>.up.railway.app/` and `/clawdbot`
 
+## Getting chat tokens (so you don’t have to scramble)
+
+### Telegram bot token
+1) Open Telegram and message **@BotFather**
+2) Run `/newbot` and follow the prompts
+3) BotFather will give you a token that looks like: `123456789:AA...`
+4) Paste that token into `/setup`
+
+### Discord bot token
+1) Go to the Discord Developer Portal: https://discord.com/developers/applications
+2) **New Application** → pick a name
+3) Open the **Bot** tab → **Add Bot**
+4) Copy the **Bot Token** and paste it into `/setup`
+5) Invite the bot to your server (OAuth2 URL Generator → scopes: `bot`, `applications.commands`; then choose permissions)
+
 ## Local smoke test
 
 ```bash

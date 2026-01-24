@@ -255,11 +255,18 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   <div class="card">
     <h2>2) Optional: Channels</h2>
     <p class="muted">You can also add channels later inside Clawdbot, but this helps you get messaging working immediately.</p>
+
     <label>Telegram bot token (optional)</label>
     <input id="telegramToken" type="password" placeholder="123456:ABC..." />
+    <div class="muted" style="margin-top: 0.25rem">
+      Get it from BotFather: open Telegram, message <code>@BotFather</code>, run <code>/newbot</code>, then copy the token.
+    </div>
 
     <label>Discord bot token (optional)</label>
     <input id="discordToken" type="password" placeholder="Bot token" />
+    <div class="muted" style="margin-top: 0.25rem">
+      Get it from the Discord Developer Portal: create an application, add a Bot, then copy the Bot Token.
+    </div>
 
     <label>Slack bot token (optional)</label>
     <input id="slackBotToken" type="password" placeholder="xoxb-..." />
