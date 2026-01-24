@@ -16,9 +16,31 @@ const WORKSPACE_DIR = process.env.CLAWDBOT_WORKSPACE_DIR?.trim() || path.join(ST
 // Protect /setup with a user-provided password.
 const SETUP_PASSWORD = process.env.SETUP_PASSWORD?.trim();
 
-// Gateway admin token (protects Clawdbot gateway + Control UI). If not provided, generate one.
-const CLAWDBOT_GATEWAY_TOKEN =
-  process.env.CLAWDBOT_GATEWAY_TOKEN?.trim() || crypto.randomBytes(32).toString("hex");
+// Gateway admin token (protects Clawdbot gateway + Control UI).
+// Must be stable across restarts. If not provided via env, persist it in the state dir.
+function resolveGatewayToken() {
+  const envTok = process.env.CLAWDBOT_GATEWAY_TOKEN?.trim();
+  if (envTok) return envTok;
+
+  const tokenPath = path.join(STATE_DIR, "gateway.token");
+  try {
+    const existing = fs.readFileSync(tokenPath, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    // ignore
+  }
+
+  const generated = crypto.randomBytes(32).toString("hex");
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(tokenPath, generated, { encoding: "utf8", mode: 0o600 });
+  } catch {
+    // best-effort
+  }
+  return generated;
+}
+
+const CLAWDBOT_GATEWAY_TOKEN = resolveGatewayToken();
 process.env.CLAWDBOT_GATEWAY_TOKEN = CLAWDBOT_GATEWAY_TOKEN;
 
 // Where the gateway will listen internally (we proxy to it).
