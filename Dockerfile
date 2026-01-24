@@ -1,36 +1,58 @@
-FROM node:22-bookworm
+# Build clawdbot from source to avoid npm packaging gaps (some dist files are not shipped).
+FROM node:22-bookworm AS clawdbot-build
 
-ENV NODE_ENV=production
-
-# clawdbot includes native deps (e.g. sharp). In some Railway build environments,
-# installing from npm may require build tools. Use full bookworm + build-essential.
+# Dependencies needed for clawdbot build
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
+    curl \
     python3 \
     make \
     g++ \
   && rm -rf /var/lib/apt/lists/*
 
+# Install Bun (clawdbot build uses it)
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+RUN corepack enable
+
+WORKDIR /clawdbot
+
+# Pin to a known ref
+ARG CLAWDBOT_GIT_REF=2026.1.23
+RUN git clone --depth 1 --branch "${CLAWDBOT_GIT_REF}" https://github.com/clawdbot/clawdbot.git .
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm build
+ENV CLAWDBOT_PREFER_PNPM=1
+RUN pnpm ui:install && pnpm ui:build
+
+
+# Runtime image
+FROM node:22-bookworm
+ENV NODE_ENV=production
+
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install wrapper deps
+# Wrapper deps
 COPY package.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
-# Install clawdbot CLI
-# Pin if desired: docker build --build-arg CLAWDBOT_VERSION=2026.1.23
-ARG CLAWDBOT_VERSION=2026.1.23
+# Copy built clawdbot
+COPY --from=clawdbot-build /clawdbot /clawdbot
 
-# Sanity check: git must exist for installs that pull git-based deps.
-RUN which git && git --version
-
-RUN npm i -g "clawdbot@${CLAWDBOT_VERSION}" && npm cache clean --force
+# Provide a clawdbot executable
+RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /clawdbot/dist/entry.js "$@"' > /usr/local/bin/clawdbot \
+  && chmod +x /usr/local/bin/clawdbot
 
 COPY src ./src
 
-# Railway provides PORT (often 8080). Wrapper listens on PORT; gateway runs internally.
 EXPOSE 8080
-
 CMD ["node", "src/server.js"]
