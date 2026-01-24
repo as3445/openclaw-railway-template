@@ -228,9 +228,10 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
   <div class="card">
     <h2>3) Run onboarding</h2>
     <button id="run">Run setup</button>
+    <button id="pairingApprove" style="background:#1f2937; margin-left:0.5rem">Approve pairing</button>
     <button id="reset" style="background:#444; margin-left:0.5rem">Reset setup</button>
     <pre id="log" style="white-space:pre-wrap"></pre>
-    <p class="muted">Reset deletes the Clawdbot config file so you can rerun onboarding.</p>
+    <p class="muted">Reset deletes the Clawdbot config file so you can rerun onboarding. Pairing approval lets you grant DM access when dmPolicy=pairing.</p>
   </div>
 
   <script src="/setup/app.js"></script>
@@ -504,6 +505,15 @@ app.get("/setup/api/debug", requireSetupAuth, async (_req, res) => {
       channelsAddHelpIncludesTelegram: help.output.includes("telegram"),
     },
   });
+});
+
+app.post("/setup/api/pairing/approve", requireSetupAuth, async (req, res) => {
+  const { channel, code } = req.body || {};
+  if (!channel || !code) {
+    return res.status(400).json({ ok: false, error: "Missing channel or code" });
+  }
+  const r = await runCmd(CLAWDBOT_NODE, clawArgs(["pairing", "approve", String(channel), String(code)]));
+  return res.status(r.code === 0 ? 200 : 500).json({ ok: r.code === 0, output: r.output });
 });
 
 app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
