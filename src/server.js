@@ -60,8 +60,7 @@ function startGatewayIfNeeded() {
     "--auth",
     "token",
     "--token",
-    CLAWDBOT_GATEWAY_TOKEN,
-    "--allow-unconfigured"
+    CLAWDBOT_GATEWAY_TOKEN
   ];
 
   gatewayProc = childProcess.spawn(CLAWDBOT_BIN, args, {
@@ -281,10 +280,12 @@ function buildOnboardArgs(payload) {
     "--accept-risk",
     "--json",
     "--no-install-daemon",
+    "--skip-health",
     "--workspace",
     WORKSPACE_DIR,
+    // The wrapper owns public networking; keep the gateway internal.
     "--gateway-bind",
-    "lan",
+    "loopback",
     "--gateway-port",
     String(INTERNAL_GATEWAY_PORT),
     "--gateway-auth",
