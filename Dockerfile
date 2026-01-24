@@ -1,12 +1,16 @@
-FROM node:22-bookworm-slim
+FROM node:22-bookworm
 
 ENV NODE_ENV=production
 
-# clawdbot install pulls some deps via git; Railway build images can be slim.
+# clawdbot includes native deps (e.g. sharp). In some Railway build environments,
+# installing from npm may require build tools. Use full bookworm + build-essential.
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
+    python3 \
+    make \
+    g++ \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
