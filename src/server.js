@@ -204,9 +204,14 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
     const authChoiceEl = document.getElementById('authChoice');
 
     async function refreshStatus() {
-      const res = await fetch('/setup/api/status');
+      const res = await fetch('/setup/api/status', { credentials: 'same-origin' });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        statusEl.textContent = `Error loading status (${res.status}): ${text || res.statusText}`;
+        return;
+      }
       const j = await res.json();
-      statusEl.textContent = j.configured ? 'Configured ✅ — open /clawdbot' : 'Not configured — run setup below';
+      statusEl.textContent = j.configured ? 'Configured — open /clawdbot' : 'Not configured — run setup below';
       renderAuth(j.authGroups);
     }
 
@@ -243,8 +248,10 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
       };
       const log = document.getElementById('log');
       log.textContent = 'Running…\n';
-      const res = await fetch('/setup/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-      const j = await res.json();
+      const res = await fetch('/setup/api/run', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      const text = await res.text();
+      let j;
+      try { j = JSON.parse(text); } catch { j = { ok: false, output: text }; }
       log.textContent += j.output || JSON.stringify(j, null, 2);
       await refreshStatus();
     };
