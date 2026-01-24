@@ -69,15 +69,35 @@ function isConfigured() {
 }
 
 let gatewayProc = null;
+let gatewayStarting = null;
 
-function startGatewayIfNeeded() {
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitForGatewayReady(opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? 20_000;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, { method: "GET" });
+      // Any HTTP response means the port is open.
+      if (res) return true;
+    } catch {
+      // not ready
+    }
+    await sleep(250);
+  }
+  return false;
+}
+
+async function startGateway() {
   if (gatewayProc) return;
-  if (!isConfigured()) return;
+  if (!isConfigured()) throw new Error("Gateway cannot start: not configured");
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
-  // Run gateway on internal port; wrapper owns the public $PORT.
   const args = [
     "gateway",
     "run",
@@ -88,7 +108,7 @@ function startGatewayIfNeeded() {
     "--auth",
     "token",
     "--token",
-    CLAWDBOT_GATEWAY_TOKEN
+    CLAWDBOT_GATEWAY_TOKEN,
   ];
 
   gatewayProc = childProcess.spawn(CLAWDBOT_NODE, clawArgs(args), {
@@ -96,8 +116,8 @@ function startGatewayIfNeeded() {
     env: {
       ...process.env,
       CLAWDBOT_STATE_DIR: STATE_DIR,
-      CLAWDBOT_WORKSPACE_DIR: WORKSPACE_DIR
-    }
+      CLAWDBOT_WORKSPACE_DIR: WORKSPACE_DIR,
+    },
   });
 
   gatewayProc.on("error", (err) => {
@@ -111,13 +131,36 @@ function startGatewayIfNeeded() {
   });
 }
 
-function stopGateway() {
-  if (!gatewayProc) return;
-  try {
-    gatewayProc.kill("SIGTERM");
-  } catch {
-    // ignore
+async function ensureGatewayRunning() {
+  if (!isConfigured()) return { ok: false, reason: "not configured" };
+  if (gatewayProc) return { ok: true };
+  if (!gatewayStarting) {
+    gatewayStarting = (async () => {
+      await startGateway();
+      const ready = await waitForGatewayReady({ timeoutMs: 20_000 });
+      if (!ready) {
+        throw new Error("Gateway did not become ready in time");
+      }
+    })().finally(() => {
+      gatewayStarting = null;
+    });
   }
+  await gatewayStarting;
+  return { ok: true };
+}
+
+async function restartGateway() {
+  if (gatewayProc) {
+    try {
+      gatewayProc.kill("SIGTERM");
+    } catch {
+      // ignore
+    }
+    // Give it a moment to exit and release the port.
+    await sleep(750);
+    gatewayProc = null;
+  }
+  return ensureGatewayRunning();
 }
 
 function requireSetupAuth(req, res, next) {
@@ -475,7 +518,8 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       }
     }
 
-    startGatewayIfNeeded();
+    // Apply changes immediately.
+    await restartGateway();
   }
 
   return res.status(ok ? 200 : 500).json({
@@ -588,12 +632,20 @@ proxy.on("error", (err, _req, _res) => {
   console.error("[proxy]", err);
 });
 
-app.use((req, res) => {
+app.use(async (req, res) => {
   // If not configured, force users to /setup for any non-setup routes.
   if (!isConfigured() && !req.path.startsWith("/setup")) {
     return res.redirect("/setup");
   }
-  startGatewayIfNeeded();
+
+  if (isConfigured()) {
+    try {
+      await ensureGatewayRunning();
+    } catch (err) {
+      return res.status(503).type("text/plain").send(`Gateway not ready: ${String(err)}`);
+    }
+  }
+
   return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
 
@@ -606,20 +658,29 @@ const server = app.listen(PORT, "0.0.0.0", () => {
   if (!SETUP_PASSWORD) {
     console.warn("[wrapper] WARNING: SETUP_PASSWORD is not set; /setup will error.");
   }
-  startGatewayIfNeeded();
+  // Don't start gateway unless configured; proxy will ensure it starts.
 });
 
-server.on("upgrade", (req, socket, head) => {
-  // Same rule: if not configured, reject upgrades.
+server.on("upgrade", async (req, socket, head) => {
   if (!isConfigured()) {
     socket.destroy();
     return;
   }
-  startGatewayIfNeeded();
+  try {
+    await ensureGatewayRunning();
+  } catch {
+    socket.destroy();
+    return;
+  }
   proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
 });
 
 process.on("SIGTERM", () => {
-  stopGateway();
+  // Best-effort shutdown
+  try {
+    if (gatewayProc) gatewayProc.kill("SIGTERM");
+  } catch {
+    // ignore
+  }
   process.exit(0);
 });
