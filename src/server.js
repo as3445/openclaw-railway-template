@@ -394,6 +394,13 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
   // Optional channel setup (only after successful onboarding, and only if the installed CLI supports it).
   if (ok) {
+    // Ensure gateway token is written into config so the browser UI can authenticate reliably.
+    // (We also enforce loopback bind since the wrapper proxies externally.)
+    await runCmd(CLAWDBOT_BIN, ["config", "set", "gateway.auth.mode", "token"]);
+    await runCmd(CLAWDBOT_BIN, ["config", "set", "gateway.auth.token", CLAWDBOT_GATEWAY_TOKEN]);
+    await runCmd(CLAWDBOT_BIN, ["config", "set", "gateway.bind", "loopback"]);
+    await runCmd(CLAWDBOT_BIN, ["config", "set", "gateway.port", String(INTERNAL_GATEWAY_PORT)]);
+
     const channelsHelp = await runCmd(CLAWDBOT_BIN, ["channels", "add", "--help"]);
     const helpText = channelsHelp.output || "";
 
