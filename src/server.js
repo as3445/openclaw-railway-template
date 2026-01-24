@@ -424,7 +424,9 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           "--token",
           payload.telegramToken.trim(),
         ]));
-        extra += `\n[telegram] exit=${r.code}\n${r.output}`;
+        const list = await runCmd(CLAWDBOT_NODE, clawArgs(["channels", "list"]));
+        extra += `\n[telegram] exit=${r.code} (output ${r.output.length} chars)\n${r.output || "(no output)"}`;
+        extra += `\n[channels list] exit=${list.code} (output ${list.output.length} chars)\n${list.output || "(no output)"}`;
       }
     }
 
@@ -440,7 +442,9 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           "--token",
           payload.discordToken.trim(),
         ]));
-        extra += `\n[discord] exit=${r.code}\n${r.output}`;
+        const list = await runCmd(CLAWDBOT_NODE, clawArgs(["channels", "list"]));
+        extra += `\n[discord] exit=${r.code} (output ${r.output.length} chars)\n${r.output || "(no output)"}`;
+        extra += `\n[channels list] exit=${list.code} (output ${list.output.length} chars)\n${list.output || "(no output)"}`;
       }
     }
 
