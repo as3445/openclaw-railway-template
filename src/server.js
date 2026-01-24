@@ -416,17 +416,22 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       if (!supports("telegram")) {
         extra += "\n[telegram] skipped (this clawdbot build does not list telegram in `channels add --help`)\n";
       } else {
-        const r = await runCmd(CLAWDBOT_NODE, clawArgs([
-          "channels",
-          "add",
-          "--channel",
-          "telegram",
-          "--token",
-          payload.telegramToken.trim(),
-        ]));
-        const list = await runCmd(CLAWDBOT_NODE, clawArgs(["channels", "list"]));
-        extra += `\n[telegram] exit=${r.code} (output ${r.output.length} chars)\n${r.output || "(no output)"}`;
-        extra += `\n[channels list] exit=${list.code} (output ${list.output.length} chars)\n${list.output || "(no output)"}`;
+        // Avoid `channels add` here (it has proven flaky across builds); write config directly.
+        const token = payload.telegramToken.trim();
+        const cfgObj = {
+          enabled: true,
+          dmPolicy: "pairing",
+          botToken: token,
+          groupPolicy: "allowlist",
+          streamMode: "partial",
+        };
+        const set = await runCmd(
+          CLAWDBOT_NODE,
+          clawArgs(["config", "set", "--json", "channels.telegram", JSON.stringify(cfgObj)]),
+        );
+        const get = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "get", "channels.telegram"]));
+        extra += `\n[telegram config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+        extra += `\n[telegram verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
       }
     }
 
@@ -434,17 +439,19 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       if (!supports("discord")) {
         extra += "\n[discord] skipped (this clawdbot build does not list discord in `channels add --help`)\n";
       } else {
-        const r = await runCmd(CLAWDBOT_NODE, clawArgs([
-          "channels",
-          "add",
-          "--channel",
-          "discord",
-          "--token",
-          payload.discordToken.trim(),
-        ]));
-        const list = await runCmd(CLAWDBOT_NODE, clawArgs(["channels", "list"]));
-        extra += `\n[discord] exit=${r.code} (output ${r.output.length} chars)\n${r.output || "(no output)"}`;
-        extra += `\n[channels list] exit=${list.code} (output ${list.output.length} chars)\n${list.output || "(no output)"}`;
+        const token = payload.discordToken.trim();
+        const cfgObj = {
+          enabled: true,
+          token,
+          groupPolicy: "allowlist",
+        };
+        const set = await runCmd(
+          CLAWDBOT_NODE,
+          clawArgs(["config", "set", "--json", "channels.discord", JSON.stringify(cfgObj)]),
+        );
+        const get = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "get", "channels.discord"]));
+        extra += `\n[discord config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+        extra += `\n[discord verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
       }
     }
 
@@ -452,11 +459,18 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       if (!supports("slack")) {
         extra += "\n[slack] skipped (this clawdbot build does not list slack in `channels add --help`)\n";
       } else {
-        const args = ["channels", "add", "--channel", "slack"];
-        if (payload.slackBotToken?.trim()) args.push("--bot-token", payload.slackBotToken.trim());
-        if (payload.slackAppToken?.trim()) args.push("--app-token", payload.slackAppToken.trim());
-        const r = await runCmd(CLAWDBOT_NODE, clawArgs(args));
-        extra += `\n[slack] exit=${r.code}\n${r.output}`;
+        const cfgObj = {
+          enabled: true,
+          botToken: payload.slackBotToken?.trim() || undefined,
+          appToken: payload.slackAppToken?.trim() || undefined,
+        };
+        const set = await runCmd(
+          CLAWDBOT_NODE,
+          clawArgs(["config", "set", "--json", "channels.slack", JSON.stringify(cfgObj)]),
+        );
+        const get = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "get", "channels.slack"]));
+        extra += `\n[slack config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+        extra += `\n[slack verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
       }
     }
 
