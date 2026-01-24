@@ -20,8 +20,8 @@ RUN corepack enable
 
 WORKDIR /clawdbot
 
-# Pin to a known ref
-ARG CLAWDBOT_GIT_REF=2026.1.23
+# Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
+ARG CLAWDBOT_GIT_REF=main
 RUN git clone --depth 1 --branch "${CLAWDBOT_GIT_REF}" https://github.com/clawdbot/clawdbot.git .
 
 RUN pnpm install --frozen-lockfile
