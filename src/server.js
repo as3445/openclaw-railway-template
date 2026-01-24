@@ -207,7 +207,7 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
       const res = await fetch('/setup/api/status', { credentials: 'same-origin' });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        statusEl.textContent = `Error loading status (${res.status}): ${text || res.statusText}`;
+        statusEl.textContent = 'Error loading status (' + res.status + '): ' + (text || res.statusText);
         return;
       }
       const j = await res.json();
