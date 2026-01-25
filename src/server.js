@@ -433,10 +433,11 @@ function runCmd(cmd, args, opts = {}) {
 }
 
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
-  if (isConfigured()) {
-    startGatewayIfNeeded();
-    return res.json({ ok: true, output: "Already configured.\nUse Reset setup if you want to rerun onboarding.\n" });
-  }
+  try {
+    if (isConfigured()) {
+      await ensureGatewayRunning();
+      return res.json({ ok: true, output: "Already configured.\nUse Reset setup if you want to rerun onboarding.\n" });
+    }
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
@@ -533,6 +534,10 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     ok,
     output: `${onboard.output}${extra}`,
   });
+  } catch (err) {
+    console.error("[/setup/api/run] error:", err);
+    return res.status(500).json({ ok: false, output: `Internal error: ${String(err)}` });
+  }
 });
 
 app.get("/setup/api/debug", requireSetupAuth, async (_req, res) => {
