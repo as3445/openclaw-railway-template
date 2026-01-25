@@ -103,14 +103,21 @@
   var pairingBtn = document.getElementById('pairingApprove');
   if (pairingBtn) {
     pairingBtn.onclick = function () {
+      var channel = prompt('Enter channel (telegram or discord):');
+      if (!channel) return;
+      channel = channel.trim().toLowerCase();
+      if (channel !== 'telegram' && channel !== 'discord') {
+        alert('Channel must be "telegram" or "discord"');
+        return;
+      }
       var code = prompt('Enter pairing code (e.g. 3EY4PUYS):');
       if (!code) return;
-      logEl.textContent += '\nApproving pairing...\n';
+      logEl.textContent += '\nApproving pairing for ' + channel + '...\n';
       fetch('/setup/api/pairing/approve', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ channel: 'telegram', code: code.trim() })
+        body: JSON.stringify({ channel: channel, code: code.trim() })
       }).then(function (r) { return r.text(); })
         .then(function (t) { logEl.textContent += t + '\n'; })
         .catch(function (e) { logEl.textContent += 'Error: ' + String(e) + '\n'; });
