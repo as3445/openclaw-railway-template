@@ -496,6 +496,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         const cfgObj = {
           enabled: true,
           token,
+          dmPolicy: "open",
           groupPolicy: "allowlist",
         };
         const set = await runCmd(
