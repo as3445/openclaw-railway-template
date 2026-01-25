@@ -496,8 +496,10 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         const cfgObj = {
           enabled: true,
           token,
-          dmPolicy: "open",
           groupPolicy: "allowlist",
+          dm: {
+            policy: "open",
+          },
         };
         const set = await runCmd(
           CLAWDBOT_NODE,
