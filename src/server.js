@@ -265,7 +265,8 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
     <label>Discord bot token (optional)</label>
     <input id="discordToken" type="password" placeholder="Bot token" />
     <div class="muted" style="margin-top: 0.25rem">
-      Get it from the Discord Developer Portal: create an application, add a Bot, then copy the Bot Token.
+      Get it from the Discord Developer Portal: create an application, add a Bot, then copy the Bot Token.<br/>
+      <strong>Important:</strong> Enable <strong>MESSAGE CONTENT INTENT</strong> in Bot → Privileged Gateway Intents, or the bot will crash on startup.
     </div>
 
     <label>Slack bot token (optional)</label>
