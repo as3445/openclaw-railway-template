@@ -60,5 +60,6 @@ RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /clawdbot/dist/entry.js "$@"'
 
 COPY src ./src
 
+ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "src/server.js"]
