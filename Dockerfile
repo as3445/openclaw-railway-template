@@ -24,13 +24,19 @@ WORKDIR /clawdbot
 ARG CLAWDBOT_GIT_REF=main
 RUN git clone --depth 1 --branch "${CLAWDBOT_GIT_REF}" https://github.com/clawdbot/clawdbot.git .
 
-# Patch: relax version requirements for packages that may reference unpublished versions
-RUN find . -name 'package.json' -exec sed -i \
-    -e 's/"clawdbot": ">=.*"/"clawdbot": "*"/g' \
-    -e 's/"@typescript\/native-preview": "[^"]*"/"@typescript\/native-preview": "latest"/g' \
-    {} + 2>/dev/null || true
+# Patch: relax version requirements for packages that may reference unpublished versions.
+# Scope this narrowly to avoid surprising dependency mutations.
+RUN set -eux; \
+  for f in \
+    ./extensions/memory-core/package.json \
+    ./extensions/googlechat/package.json \
+  ; do \
+    if [ -f "$f" ]; then \
+      sed -i -E 's/"clawdbot"[[:space:]]*:[[:space:]]*">=[^"]+"/"clawdbot": "*"/g' "$f"; \
+    fi; \
+  done
 
-RUN pnpm install
+RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
 ENV CLAWDBOT_PREFER_PNPM=1
 RUN pnpm ui:install && pnpm ui:build
