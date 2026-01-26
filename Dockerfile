@@ -24,6 +24,9 @@ WORKDIR /clawdbot
 ARG CLAWDBOT_GIT_REF=main
 RUN git clone --depth 1 --branch "${CLAWDBOT_GIT_REF}" https://github.com/clawdbot/clawdbot.git .
 
+# Patch: relax clawdbot version requirement in extensions that may reference unpublished versions
+RUN find extensions -name 'package.json' -exec sed -i 's/"clawdbot": ">=.*"/"clawdbot": "*"/g' {} + 2>/dev/null || true
+
 RUN pnpm install
 RUN pnpm build
 ENV CLAWDBOT_PREFER_PNPM=1
