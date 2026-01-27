@@ -33,6 +33,7 @@ RUN set -eux; \
   ; do \
     if [ -f "$f" ]; then \
       sed -i -E 's/"clawdbot"[[:space:]]*:[[:space:]]*">=[^"]+"/"clawdbot": "*"/g' "$f"; \
+      sed -i -E 's/"moltbot"[[:space:]]*:[[:space:]]*">=[^"]+"/"moltbot": "*"/g' "$f"; \
     fi; \
   done
 
