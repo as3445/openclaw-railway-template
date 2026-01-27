@@ -813,7 +813,13 @@ app.use(async (req, res) => {
     }
   }
 
-  return proxy.web(req, res, { target: GATEWAY_TARGET });
+  // Inject the gateway token into the request headers so the browser UI can authenticate
+  return proxy.web(req, res, {
+    target: GATEWAY_TARGET,
+    headers: {
+      Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
+    },
+  });
 });
 
 const server = app.listen(PORT, "0.0.0.0", () => {
@@ -843,7 +849,13 @@ server.on("upgrade", async (req, socket, head) => {
     socket.destroy();
     return;
   }
-  proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
+  // Inject the gateway token for WebSocket authentication
+  proxy.ws(req, socket, head, {
+    target: GATEWAY_TARGET,
+    headers: {
+      Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
+    },
+  });
 });
 
 process.on("SIGTERM", () => {
