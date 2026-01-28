@@ -572,6 +572,11 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           String(INTERNAL_GATEWAY_PORT),
         ]),
       );
+      // Allow Control UI access without device pairing (fixes error 1008: pairing required)
+      await runCmd(
+        MOLTBOT_NODE,
+        clawArgs(["config", "set", "gateway.controlUi.allowInsecureAuth", "true"]),
+      );
 
       const channelsHelp = await runCmd(
         MOLTBOT_NODE,
