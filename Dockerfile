@@ -1,7 +1,7 @@
-# Build clawdbot from source to avoid npm packaging gaps (some dist files are not shipped).
-FROM node:22-bookworm AS clawdbot-build
+# Build moltbot from source to avoid npm packaging gaps (some dist files are not shipped).
+FROM node:22-bookworm AS moltbot-build
 
-# Dependencies needed for clawdbot build
+# Dependencies needed for moltbot build
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
@@ -12,17 +12,17 @@ RUN apt-get update \
     g++ \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Bun (clawdbot build uses it)
+# Install Bun (moltbot build uses it)
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
 RUN corepack enable
 
-WORKDIR /clawdbot
+WORKDIR /moltbot
 
 # Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
-ARG CLAWDBOT_GIT_REF=main
-RUN git clone --depth 1 --branch "${CLAWDBOT_GIT_REF}" https://github.com/clawdbot/clawdbot.git .
+ARG MOLTBOT_GIT_REF=main
+RUN git clone --depth 1 --branch "${MOLTBOT_GIT_REF}" https://github.com/moltbot/moltbot.git .
 
 # Patch: relax version requirements for packages that may reference unpublished versions.
 # Scope this narrowly to avoid surprising dependency mutations.
@@ -32,14 +32,14 @@ RUN set -eux; \
     ./extensions/googlechat/package.json \
   ; do \
     if [ -f "$f" ]; then \
-      sed -i -E 's/"clawdbot"[[:space:]]*:[[:space:]]*">=[^"]+"/"clawdbot": "*"/g' "$f"; \
+      sed -i -E 's/"moltbot"[[:space:]]*:[[:space:]]*">=[^"]+"/"moltbot": "*"/g' "$f"; \
       sed -i -E 's/"moltbot"[[:space:]]*:[[:space:]]*">=[^"]+"/"moltbot": "*"/g' "$f"; \
     fi; \
   done
 
 RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
-ENV CLAWDBOT_PREFER_PNPM=1
+ENV MOLTBOT_PREFER_PNPM=1
 RUN pnpm ui:install && pnpm ui:build
 
 
@@ -58,12 +58,12 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
-# Copy built clawdbot
-COPY --from=clawdbot-build /clawdbot /clawdbot
+# Copy built moltbot
+COPY --from=moltbot-build /moltbot /moltbot
 
-# Provide a clawdbot executable
-RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /clawdbot/dist/entry.js "$@"' > /usr/local/bin/clawdbot \
-  && chmod +x /usr/local/bin/clawdbot
+# Provide a moltbot executable
+RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /moltbot/dist/entry.js "$@"' > /usr/local/bin/moltbot \
+  && chmod +x /usr/local/bin/moltbot
 
 COPY src ./src
 
