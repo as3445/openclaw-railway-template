@@ -117,8 +117,10 @@ When the user runs setup (src/server.js:522-693):
 
 The wrapper **always** injects the bearer token into proxied requests so browser clients don't need to know it:
 
-- HTTP requests: `req.headers["authorization"] = "Bearer ${token}"` (src/server.js:831)
-- WebSocket upgrades: same injection (src/server.js:847)
+- HTTP requests: via `proxy.on("proxyReq")` event handler (src/server.js:~814)
+- WebSocket upgrades: via `proxy.on("proxyReqWs")` event handler (src/server.js:~818)
+
+**Important**: Token injection uses `http-proxy` event handlers (`proxyReq` and `proxyReqWs`) rather than direct `req.headers` modification. Direct header modification does not reliably work with WebSocket upgrades, causing intermittent `token_missing` or `token_mismatch` errors.
 
 This allows the Control UI at `/moltbot` to work without user authentication.
 
@@ -200,3 +202,4 @@ This avoids repeatedly reading large files and provides instant context about th
 3. **Gateway readiness check polls multiple endpoints** (`/moltbot`, `/`, `/health`) → some builds only expose certain routes (src/server.js:92)
 4. **Discord bots require MESSAGE CONTENT INTENT** → document this in setup wizard (src/server.js:295-298)
 5. **Gateway spawn inherits stdio** → logs appear in wrapper output (src/server.js:134)
+6. **WebSocket auth requires proxy event handlers** → Direct `req.headers` modification doesn't work for WebSocket upgrades with http-proxy; must use `proxyReqWs` event (src/server.js:~818) to reliably inject Authorization header

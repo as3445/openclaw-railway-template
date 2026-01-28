@@ -810,6 +810,16 @@ proxy.on("error", (err, _req, _res) => {
   console.error("[proxy]", err);
 });
 
+// Inject auth token into HTTP proxy requests
+proxy.on("proxyReq", (proxyReq, req, res) => {
+  proxyReq.setHeader("Authorization", `Bearer ${MOLTBOT_GATEWAY_TOKEN}`);
+});
+
+// Inject auth token into WebSocket upgrade requests
+proxy.on("proxyReqWs", (proxyReq, req, socket, options, head) => {
+  proxyReq.setHeader("Authorization", `Bearer ${MOLTBOT_GATEWAY_TOKEN}`);
+});
+
 app.use(async (req, res) => {
   // If not configured, force users to /setup for any non-setup routes.
   if (!isConfigured() && !req.path.startsWith("/setup")) {
@@ -827,8 +837,7 @@ app.use(async (req, res) => {
     }
   }
 
-  // Inject the gateway token into the request headers so the browser UI can authenticate
-  req.headers["authorization"] = `Bearer ${MOLTBOT_GATEWAY_TOKEN}`;
+  // Proxy to gateway (auth token injected via proxyReq event)
   return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
 
@@ -851,8 +860,7 @@ server.on("upgrade", async (req, socket, head) => {
     socket.destroy();
     return;
   }
-  // Inject the gateway token for WebSocket authentication
-  req.headers["authorization"] = `Bearer ${MOLTBOT_GATEWAY_TOKEN}`;
+  // Proxy WebSocket upgrade (auth token injected via proxyReqWs event)
   proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
 });
 
