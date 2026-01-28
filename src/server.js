@@ -828,30 +828,10 @@ app.use(async (req, res) => {
   }
 
   // Inject the gateway token into the request headers so the browser UI can authenticate
-  return proxy.web(req, res, {
-    target: GATEWAY_TARGET,
-    headers: {
-      Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
-    },
-  });
+  req.headers["authorization"] = `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`;
+  return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
-
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`[wrapper] listening on :${PORT}`);
-  console.log(`[wrapper] state dir: ${STATE_DIR}`);
-  console.log(`[wrapper] workspace dir: ${WORKSPACE_DIR}`);
-  console.log(
-    `[wrapper] gateway token: ${CLAWDBOT_GATEWAY_TOKEN ? "(set)" : "(missing)"}`,
-  );
-  console.log(`[wrapper] gateway target: ${GATEWAY_TARGET}`);
-  if (!SETUP_PASSWORD) {
-    console.warn(
-      "[wrapper] WARNING: SETUP_PASSWORD is not set; /setup will error.",
-    );
-  }
-  // Don't start gateway unless configured; proxy will ensure it starts.
-});
-
+// ... 
 server.on("upgrade", async (req, socket, head) => {
   if (!isConfigured()) {
     socket.destroy();
@@ -864,12 +844,8 @@ server.on("upgrade", async (req, socket, head) => {
     return;
   }
   // Inject the gateway token for WebSocket authentication
-  proxy.ws(req, socket, head, {
-    target: GATEWAY_TARGET,
-    headers: {
-      Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
-    },
-  });
+  req.headers["authorization"] = `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`;
+  proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
 });
 
 process.on("SIGTERM", () => {
