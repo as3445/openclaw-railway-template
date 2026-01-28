@@ -831,7 +831,15 @@ app.use(async (req, res) => {
   req.headers["authorization"] = `Bearer ${MOLTBOT_GATEWAY_TOKEN}`;
   return proxy.web(req, res, { target: GATEWAY_TARGET });
 });
-// ... 
+
+// Create HTTP server from Express app
+const server = app.listen(PORT, () => {
+  console.log(`[wrapper] listening on port ${PORT}`);
+  console.log(`[wrapper] setup wizard: http://localhost:${PORT}/setup`);
+  console.log(`[wrapper] configured: ${isConfigured()}`);
+});
+
+// Handle WebSocket upgrades
 server.on("upgrade", async (req, socket, head) => {
   if (!isConfigured()) {
     socket.destroy();

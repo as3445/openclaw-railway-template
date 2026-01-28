@@ -1,0 +1,202 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Overview
+
+This is a Railway deployment wrapper for **Moltbot** (an AI coding assistant platform). It provides:
+
+- A web-based setup wizard at `/setup` (protected by `SETUP_PASSWORD`)
+- Automatic reverse proxy from public URL → internal Moltbot gateway
+- Persistent state via Railway Volume at `/data`
+- One-click backup export of configuration and workspace
+
+The wrapper manages the Moltbot lifecycle: onboarding → gateway startup → traffic proxying.
+
+## Development Commands
+
+```bash
+# Local development (requires Moltbot in /moltbot or MOLTBOT_ENTRY set)
+npm run dev
+
+# Production start
+npm start
+
+# Syntax check
+npm run lint
+
+# Local smoke test (requires Docker)
+npm run smoke
+```
+
+## Docker Build & Local Testing
+
+```bash
+# Build the container (builds Moltbot from source)
+docker build -t moltbot-railway-template .
+
+# Run locally with volume
+docker run --rm -p 8080:8080 \
+  -e PORT=8080 \
+  -e SETUP_PASSWORD=test \
+  -e MOLTBOT_STATE_DIR=/data/.moltbot \
+  -e MOLTBOT_WORKSPACE_DIR=/data/workspace \
+  -v $(pwd)/.tmpdata:/data \
+  moltbot-railway-template
+
+# Access setup wizard
+open http://localhost:8080/setup  # password: test
+```
+
+## Architecture
+
+### Request Flow
+
+1. **User → Railway → Wrapper (Express on PORT)** → routes to:
+   - `/setup/*` → setup wizard (auth: Basic with `SETUP_PASSWORD`)
+   - All other routes → proxied to internal gateway
+
+2. **Wrapper → Gateway** (localhost:18789 by default)
+   - HTTP/WebSocket reverse proxy via `http-proxy`
+   - Automatically injects `Authorization: Bearer <token>` header
+
+### Lifecycle States
+
+1. **Unconfigured**: No `moltbot.json` exists
+   - All non-`/setup` routes redirect to `/setup`
+   - User completes setup wizard → runs `moltbot onboard --non-interactive`
+
+2. **Configured**: `moltbot.json` exists
+   - Wrapper spawns `moltbot gateway run` as child process
+   - Waits for gateway to respond on multiple health endpoints
+   - Proxies all traffic with injected bearer token
+
+### Key Files
+
+- **src/server.js** (main entry): Express wrapper, proxy setup, gateway lifecycle management, configuration persistence
+- **src/setup-app.js**: Client-side JS for `/setup` wizard (vanilla JS, no build step)
+- **Dockerfile**: Multi-stage build (builds Moltbot from source, installs wrapper deps)
+
+### Environment Variables
+
+**Required:**
+- `SETUP_PASSWORD` — protects `/setup` wizard
+
+**Recommended (Railway template defaults):**
+- `MOLTBOT_STATE_DIR=/data/.moltbot` — config + credentials
+- `MOLTBOT_WORKSPACE_DIR=/data/workspace` — agent workspace
+
+**Optional:**
+- `MOLTBOT_GATEWAY_TOKEN` — auth token for gateway (auto-generated if unset)
+- `PORT` — wrapper HTTP port (default 8080)
+- `INTERNAL_GATEWAY_PORT` — gateway internal port (default 18789)
+- `MOLTBOT_ENTRY` — path to `entry.js` (default `/moltbot/dist/entry.js`)
+
+### Authentication Flow
+
+The wrapper manages a **two-layer auth scheme**:
+
+1. **Setup wizard auth**: Basic auth with `SETUP_PASSWORD` (src/server.js:190-214)
+2. **Gateway auth**: Bearer token (auto-generated or from `MOLTBOT_GATEWAY_TOKEN` env)
+   - Token is auto-injected into proxied requests (src/server.js:831, src/server.js:847)
+   - Persisted to `${STATE_DIR}/gateway.token` if not provided via env (src/server.js:25-48)
+
+### Onboarding Process
+
+When the user runs setup (src/server.js:522-693):
+
+1. Calls `moltbot onboard --non-interactive` with user-selected auth provider
+2. Writes channel configs (Telegram/Discord/Slack) directly to `moltbot.json` via `moltbot config set --json`
+3. Force-sets gateway config to use token auth + loopback bind
+4. Spawns gateway process
+5. Waits for gateway readiness (polls multiple endpoints)
+
+**Important**: Channel setup bypasses `moltbot channels add` and writes config directly because `channels add` is flaky across different Moltbot builds.
+
+### Gateway Token Injection
+
+The wrapper **always** injects the bearer token into proxied requests so browser clients don't need to know it:
+
+- HTTP requests: `req.headers["authorization"] = "Bearer ${token}"` (src/server.js:831)
+- WebSocket upgrades: same injection (src/server.js:847)
+
+This allows the Control UI at `/moltbot` to work without user authentication.
+
+### Backup Export
+
+`GET /setup/export` (src/server.js:752-800):
+
+- Creates a `.tar.gz` archive of `STATE_DIR` and `WORKSPACE_DIR`
+- Preserves relative structure under `/data` (e.g., `.moltbot/`, `workspace/`)
+- Includes dotfiles (config, credentials, sessions)
+
+## Common Development Tasks
+
+### Testing the setup wizard
+
+1. Delete `${STATE_DIR}/moltbot.json` (or run Reset in the UI)
+2. Visit `/setup` and complete onboarding
+3. Check logs for gateway startup and channel config writes
+
+### Testing authentication
+
+- Setup wizard: Clear browser auth, verify Basic auth challenge
+- Gateway: Remove `Authorization` header injection (src/server.js:831) and verify requests fail
+
+### Debugging gateway startup
+
+Check logs for:
+- `[gateway] starting with command: ...` (src/server.js:142)
+- `[gateway] ready at <endpoint>` (src/server.js:100)
+- `[gateway] failed to become ready after 20000ms` (src/server.js:109)
+
+If gateway doesn't start:
+- Verify `moltbot.json` exists and is valid JSON
+- Check `STATE_DIR` and `WORKSPACE_DIR` are writable
+- Ensure bearer token is set in config
+
+### Modifying onboarding args
+
+Edit `buildOnboardArgs()` (src/server.js:442-496) to add new CLI flags or auth providers.
+
+### Adding new channel types
+
+1. Add channel-specific fields to `/setup` HTML (src/server.js:231-319)
+2. Add config-writing logic in `/setup/api/run` handler (src/server.js:584-677)
+3. Update client JS to collect the fields (src/setup-app.js:72-81)
+
+## Railway Deployment Notes
+
+- Template must mount a volume at `/data`
+- Must set `SETUP_PASSWORD` in Railway Variables
+- Public networking must be enabled (assigns `*.up.railway.app` domain)
+- Moltbot version is pinned via Docker build arg `MOLTBOT_GIT_REF` (default: `main`)
+
+## Serena Semantic Coding
+
+This project has been onboarded with **Serena** (semantic coding assistant via MCP). Comprehensive memory files are available covering:
+
+- Project overview and architecture
+- Tech stack and codebase structure
+- Code style and conventions
+- Development commands and task completion checklist
+- Quirks and gotchas
+
+**When working on tasks:**
+1. Check `mcp__serena__check_onboarding_performed` first to see available memories
+2. Read relevant memory files before diving into code (e.g., `mcp__serena__read_memory`)
+3. Use Serena's semantic tools for efficient code exploration:
+   - `get_symbols_overview` - Get high-level file structure without reading entire file
+   - `find_symbol` - Find classes, functions, methods by name path
+   - `find_referencing_symbols` - Understand dependencies and usage
+4. Prefer symbolic editing (`replace_symbol_body`, `insert_after_symbol`) for precise modifications
+
+This avoids repeatedly reading large files and provides instant context about the project.
+
+## Quirks & Gotchas
+
+1. **Gateway token must be stable across redeploys** → persisted to volume if not in env
+2. **Channels are written via `config set --json`, not `channels add`** → avoids CLI version incompatibilities
+3. **Gateway readiness check polls multiple endpoints** (`/moltbot`, `/`, `/health`) → some builds only expose certain routes (src/server.js:92)
+4. **Discord bots require MESSAGE CONTENT INTENT** → document this in setup wizard (src/server.js:295-298)
+5. **Gateway spawn inherits stdio** → logs appear in wrapper output (src/server.js:134)
