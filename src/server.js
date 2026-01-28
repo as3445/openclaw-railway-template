@@ -89,16 +89,24 @@ function sleep(ms) {
 async function waitForGatewayReady(opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 20_000;
   const start = Date.now();
+  const endpoints = ["/clawdbot", "/moltbot", "/", "/health"];
+  
   while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, { method: "GET" });
-      // Any HTTP response means the port is open.
-      if (res) return true;
-    } catch {
-      // not ready
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(`${GATEWAY_TARGET}${endpoint}`, { method: "GET" });
+        // Any HTTP response means the port is open.
+        if (res) {
+          console.log(`[gateway] ready at ${endpoint}`);
+          return true;
+        }
+      } catch (err) {
+        // not ready, try next endpoint
+      }
     }
     await sleep(250);
   }
+  console.error(`[gateway] failed to become ready after ${timeoutMs}ms`);
   return false;
 }
 
@@ -130,6 +138,11 @@ async function startGateway() {
       CLAWDBOT_WORKSPACE_DIR: WORKSPACE_DIR,
     },
   });
+
+  console.log(`[gateway] starting with command: ${CLAWDBOT_NODE} ${clawArgs(args).join(" ")}`);
+  console.log(`[gateway] STATE_DIR: ${STATE_DIR}`);
+  console.log(`[gateway] WORKSPACE_DIR: ${WORKSPACE_DIR}`);
+  console.log(`[gateway] config path: ${configPath()}`);
 
   gatewayProc.on("error", (err) => {
     console.error(`[gateway] spawn error: ${String(err)}`);
@@ -532,6 +545,7 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     if (ok) {
       // Ensure gateway token is written into config so the browser UI can authenticate reliably.
       // (We also enforce loopback bind since the wrapper proxies externally.)
+      await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.mode", "local"]));
       await runCmd(
         CLAWDBOT_NODE,
         clawArgs(["config", "set", "gateway.auth.mode", "token"]),
