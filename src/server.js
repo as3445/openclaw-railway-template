@@ -117,6 +117,14 @@ async function startGateway() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
+  // Sync wrapper token to openclaw.json before every gateway start.
+  // This ensures the gateway's config-file token matches what the wrapper injects via proxy.
+  console.log("[gateway] syncing token to config...");
+  await runCmd(
+    OPENCLAW_NODE,
+    clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]),
+  );
+
   const args = [
     "gateway",
     "run",

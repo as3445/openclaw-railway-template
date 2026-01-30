@@ -206,7 +206,7 @@ This avoids repeatedly reading large files and provides instant context about th
 
 ## Quirks & Gotchas
 
-1. **Gateway token must be stable across redeploys** → persisted to volume if not in env
+1. **Gateway token must be stable across redeploys** → persisted to volume if not in env; synced to `openclaw.json` on every gateway start (src/server.js:120) because the `gateway run --token` flag is ignored (gateway only reads from config file)
 2. **Channels are written via `config set --json`, not `channels add`** → avoids CLI version incompatibilities
 3. **Gateway readiness check polls multiple endpoints** (`/openclaw`, `/`, `/health`) → some builds only expose certain routes (src/server.js:92)
 4. **Discord bots require MESSAGE CONTENT INTENT** → document this in setup wizard (src/server.js:295-298)
