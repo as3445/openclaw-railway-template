@@ -20,26 +20,40 @@ const WORKSPACE_DIR =
 // Protect /setup with a user-provided password.
 const SETUP_PASSWORD = process.env.SETUP_PASSWORD?.trim();
 
+// Debug logging helper
+const DEBUG = process.env.OPENCLAW_TEMPLATE_DEBUG?.toLowerCase() === "true";
+function debug(...args) {
+  if (DEBUG) console.log(...args);
+}
+
 // Gateway admin token (protects Openclaw gateway + Control UI).
 // Must be stable across restarts. If not provided via env, persist it in the state dir.
 function resolveGatewayToken() {
   const envTok = process.env.OPENCLAW_GATEWAY_TOKEN?.trim();
-  if (envTok) return envTok;
+  if (envTok) {
+    debug(`[token] Using token from OPENCLAW_GATEWAY_TOKEN env variable (${envTok.slice(0, 8)}...)`);
+    return envTok;
+  }
 
   const tokenPath = path.join(STATE_DIR, "gateway.token");
   try {
     const existing = fs.readFileSync(tokenPath, "utf8").trim();
-    if (existing) return existing;
+    if (existing) {
+      debug(`[token] Using token from persisted file ${tokenPath} (${existing.slice(0, 8)}...)`);
+      return existing;
+    }
   } catch {
     // ignore
   }
 
   const generated = crypto.randomBytes(32).toString("hex");
+  debug(`[token] Generated new random token (${generated.slice(0, 8)}...)`);
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     fs.writeFileSync(tokenPath, generated, { encoding: "utf8", mode: 0o600 });
-  } catch {
-    // best-effort
+    debug(`[token] Persisted token to ${tokenPath}`);
+  } catch (err) {
+    console.warn(`[token] Could not persist token: ${err}`);
   }
   return generated;
 }
@@ -119,11 +133,30 @@ async function startGateway() {
 
   // Sync wrapper token to openclaw.json before every gateway start.
   // This ensures the gateway's config-file token matches what the wrapper injects via proxy.
-  console.log("[gateway] syncing token to config...");
-  await runCmd(
+  debug(`[gateway] syncing token to config (${OPENCLAW_GATEWAY_TOKEN.slice(0, 8)}...)`);
+  const syncResult = await runCmd(
     OPENCLAW_NODE,
     clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]),
   );
+
+  if (syncResult.code !== 0) {
+    console.error(`[gateway] WARNING: Token sync failed with code ${syncResult.code}: ${syncResult.output}`);
+  }
+
+  // Verify sync succeeded
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath(), "utf8"));
+    const configToken = config?.gateway?.auth?.token;
+    if (configToken !== OPENCLAW_GATEWAY_TOKEN) {
+      throw new Error(
+        `Token mismatch: wrapper has ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}... but config has ${(configToken || 'null')?.slice?.(0, 16)}...`
+      );
+    }
+    debug("[gateway] ✓ Token verified in config");
+  } catch (err) {
+    console.error(`[gateway] ERROR: Token verification failed: ${err}`);
+    throw err; // Don't start gateway with mismatched token
+  }
 
   const args = [
     "gateway",
@@ -470,12 +503,15 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     if (ok) {
       // Ensure gateway token is written into config so the browser UI can authenticate reliably.
       // (We also enforce loopback bind since the wrapper proxies externally.)
+      debug(`[onboard] syncing wrapper token to config (${OPENCLAW_GATEWAY_TOKEN.slice(0, 8)}...)`);
+
       await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.mode", "local"]));
       await runCmd(
         OPENCLAW_NODE,
         clawArgs(["config", "set", "gateway.auth.mode", "token"]),
       );
-      await runCmd(
+
+      const setTokenResult = await runCmd(
         OPENCLAW_NODE,
         clawArgs([
           "config",
@@ -484,6 +520,32 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           OPENCLAW_GATEWAY_TOKEN,
         ]),
       );
+
+      if (setTokenResult.code !== 0) {
+        console.error(`[onboard] WARNING: config set gateway.auth.token failed with code ${setTokenResult.code}`);
+        extra += `\n[WARNING] Failed to set gateway token in config: ${setTokenResult.output}\n`;
+      }
+
+      // Verify the token was actually written to config
+      try {
+        const configContent = fs.readFileSync(configPath(), "utf8");
+        const config = JSON.parse(configContent);
+        const configToken = config?.gateway?.auth?.token;
+
+        if (configToken !== OPENCLAW_GATEWAY_TOKEN) {
+          console.error(`[onboard] ERROR: Token mismatch after config set!`);
+          console.error(`[onboard]   Expected: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}...`);
+          console.error(`[onboard]   Got:      ${(configToken || 'null')?.slice?.(0, 16)}...`);
+          extra += `\n[ERROR] Token verification failed! Config has different token than wrapper.\n`;
+        } else {
+          debug(`[onboard] ✓ Token verified in config file`);
+          extra += `\n[onboard] Gateway token synced successfully\n`;
+        }
+      } catch (err) {
+        console.error(`[onboard] ERROR: Could not verify token in config: ${err}`);
+        extra += `\n[ERROR] Could not verify token: ${String(err)}\n`;
+      }
+
       await runCmd(
         OPENCLAW_NODE,
         clawArgs(["config", "set", "gateway.bind", "loopback"]),

@@ -103,19 +103,32 @@ open http://localhost:8080/setup  # password: test
 The wrapper manages a **two-layer auth scheme**:
 
 1. **Setup wizard auth**: Basic auth with `SETUP_PASSWORD` (src/server.js:190)
-2. **Gateway auth**: Bearer token (auto-generated or from `OPENCLAW_GATEWAY_TOKEN` env)
-   - Token is auto-injected into proxied requests (src/server.js:736, src/server.js:741)
-   - Persisted to `${STATE_DIR}/gateway.token` if not provided via env (src/server.js:25-48)
+2. **Gateway auth**: Bearer token with multi-source resolution and automatic sync
+   - **Token resolution order** (src/server.js:25-55):
+     1. `OPENCLAW_GATEWAY_TOKEN` env variable (highest priority) ✅
+     2. Persisted file at `${STATE_DIR}/gateway.token`
+     3. Generate new random token and persist
+   - **Token synchronization**:
+     - During onboarding: Synced to `openclaw.json` with verification (src/server.js:478-511)
+     - Every gateway start: Synced to `openclaw.json` with verification (src/server.js:120-143)
+     - Reason: Openclaw gateway reads token from config file, not from `--token` flag
+   - **Token injection**:
+     - HTTP requests: via `proxy.on("proxyReq")` event handler (src/server.js:761)
+     - WebSocket upgrades: via `proxy.on("proxyReqWs")` event handler (src/server.js:766)
 
 ### Onboarding Process
 
-When the user runs setup (src/server.js:522-693):
+When the user runs setup (src/server.js:447-650):
 
-1. Calls `openclaw onboard --non-interactive` with user-selected auth provider
-2. Writes channel configs (Telegram/Discord/Slack) directly to `openclaw.json` via `openclaw config set --json`
-3. Force-sets gateway config to use token auth + loopback bind + allowInsecureAuth
-4. Spawns gateway process
-5. Waits for gateway readiness (polls multiple endpoints)
+1. Calls `openclaw onboard --non-interactive` with user-selected auth provider and `--gateway-token` flag
+2. **Syncs wrapper token to `openclaw.json`** (overwrites whatever `onboard` generated):
+   - Sets `gateway.auth.token` to `OPENCLAW_GATEWAY_TOKEN` env variable
+   - Verifies sync succeeded by reading config file back
+   - Logs warning/error if mismatch detected
+3. Writes channel configs (Telegram/Discord/Slack) directly to `openclaw.json` via `openclaw config set --json`
+4. Force-sets gateway config to use token auth + loopback bind + allowInsecureAuth
+5. Restarts gateway process to apply all config changes
+6. Waits for gateway readiness (polls multiple endpoints)
 
 **Important**: Channel setup bypasses `openclaw channels add` and writes config directly because `channels add` is flaky across different Openclaw builds.
 
@@ -206,7 +219,7 @@ This avoids repeatedly reading large files and provides instant context about th
 
 ## Quirks & Gotchas
 
-1. **Gateway token must be stable across redeploys** → persisted to volume if not in env; synced to `openclaw.json` on every gateway start (src/server.js:120) because the `gateway run --token` flag is ignored (gateway only reads from config file)
+1. **Gateway token must be stable across redeploys** → Always set `OPENCLAW_GATEWAY_TOKEN` env variable in Railway (highest priority); token is synced to `openclaw.json` during onboarding (src/server.js:478-511) and on every gateway start (src/server.js:120-143) with verification. This is required because `openclaw onboard` generates its own random token and the gateway reads from config file, not from `--token` CLI flag. Sync failures throw errors and prevent gateway startup.
 2. **Channels are written via `config set --json`, not `channels add`** → avoids CLI version incompatibilities
 3. **Gateway readiness check polls multiple endpoints** (`/openclaw`, `/`, `/health`) → some builds only expose certain routes (src/server.js:92)
 4. **Discord bots require MESSAGE CONTENT INTENT** → document this in setup wizard (src/server.js:295-298)
