@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moltbot Setup</title>
+  <title>Openclaw Setup</title>
   <link rel="stylesheet" href="/setup/styles.css" />
 </head>
 <body>
-  <h1>Moltbot Setup</h1>
-  <p class="muted">This wizard configures Moltbot by running the same onboarding command it uses in the terminal, but from the browser.</p>
+  <h1>Openclaw Setup</h1>
+  <p class="muted">This wizard configures Openclaw by running the same onboarding command it uses in the terminal, but from the browser.</p>
 
   <div class="card">
     <h2>Status</h2>
     <div id="status">Loading...</div>
     <div style="margin-top: 0.75rem">
-      <a href="/moltbot" target="_blank">Open Moltbot UI</a>
+      <a href="/openclaw" target="_blank">Open Openclaw UI</a>
       &nbsp;|&nbsp;
       <a href="/setup/export" target="_blank">Download backup (.tar.gz)</a>
     </div>
@@ -42,7 +42,7 @@
 
   <div class="card">
     <h2>2) Optional: Channels</h2>
-    <p class="muted">You can also add channels later inside Moltbot, but this helps you get messaging working immediately.</p>
+    <p class="muted">You can also add channels later inside Openclaw, but this helps you get messaging working immediately.</p>
 
     <label>Telegram bot token (optional)</label>
     <input id="telegramToken" type="password" placeholder="123456:ABC..." />
@@ -70,7 +70,7 @@
     <button id="pairingApprove" class="secondary-button">Approve pairing</button>
     <button id="reset" class="tertiary-button">Reset setup</button>
     <pre id="log"></pre>
-    <p class="muted">Reset deletes the Moltbot config file so you can rerun onboarding. Pairing approval lets you grant DM access when dmPolicy=pairing.</p>
+    <p class="muted">Reset deletes the Openclaw config file so you can rerun onboarding. Pairing approval lets you grant DM access when dmPolicy=pairing.</p>
   </div>
 
   <script src="/setup/app.js"></script>
