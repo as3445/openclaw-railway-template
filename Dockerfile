@@ -73,8 +73,9 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 WORKDIR /app
 
 # Wrapper deps
-COPY package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 
 # Copy built openclaw
 COPY --from=openclaw-build /openclaw /openclaw
