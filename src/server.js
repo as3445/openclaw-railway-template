@@ -892,18 +892,10 @@ proxy.on("proxyReq", (proxyReq, req, res) => {
   proxyReq.setHeader("Authorization", `Bearer ${OPENCLAW_GATEWAY_TOKEN}`);
 });
 
-// Inject auth token into WebSocket upgrade requests
+// Log WebSocket upgrade proxy events (token is injected via headers option in server.on("upgrade"))
 proxy.on("proxyReqWs", (proxyReq, req, socket, options, head) => {
-  const fullToken = OPENCLAW_GATEWAY_TOKEN;
-  console.log(`[proxy] WebSocket upgrade ${req.url}`);
-  console.log(`[proxy]   Token to inject: ${fullToken}`);
-  console.log(`[proxy]   Token length: ${fullToken.length}`);
-  console.log(`[proxy]   Existing Authorization header: ${req.headers.authorization || '(none)'}`);
-
-  proxyReq.setHeader("Authorization", `Bearer ${fullToken}`);
-
-  console.log(`[proxy]   Set Authorization to: Bearer ${fullToken.slice(0, 16)}...`);
-  console.log(`[proxy]   All headers being sent:`, JSON.stringify(proxyReq.getHeaders()));
+  console.log(`[proxy-event] WebSocket proxyReqWs event fired for ${req.url}`);
+  console.log(`[proxy-event] Headers:`, JSON.stringify(proxyReq.getHeaders()));
 });
 
 app.use(async (req, res) => {
@@ -947,14 +939,15 @@ server.on("upgrade", async (req, socket, head) => {
     return;
   }
 
-  // Inject auth token BEFORE proxying (proxyReqWs event might not work reliably)
-  console.log(`[ws-upgrade] Injecting token directly into req.headers`);
-  console.log(`[ws-upgrade]   Before: ${req.headers.authorization || '(none)'}`);
-  req.headers.authorization = `Bearer ${OPENCLAW_GATEWAY_TOKEN}`;
-  console.log(`[ws-upgrade]   After: ${req.headers.authorization.slice(0, 30)}...`);
+  // Inject auth token via headers option (req.headers modification doesn't work for WS)
+  console.log(`[ws-upgrade] Proxying WebSocket upgrade with token: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}...`);
 
-  // Proxy WebSocket upgrade (token already injected above)
-  proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
+  proxy.ws(req, socket, head, {
+    target: GATEWAY_TARGET,
+    headers: {
+      Authorization: `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
+    },
+  });
 });
 
 process.on("SIGTERM", () => {
