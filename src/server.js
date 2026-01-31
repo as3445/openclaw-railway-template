@@ -245,16 +245,32 @@ async function ensureGatewayRunning() {
 }
 
 async function restartGateway() {
+  console.log("[gateway] Restarting gateway...");
+
+  // Kill gateway process tracked by wrapper
   if (gatewayProc) {
+    console.log("[gateway] Killing wrapper-managed gateway process");
     try {
       gatewayProc.kill("SIGTERM");
     } catch {
       // ignore
     }
-    // Give it a moment to exit and release the port.
-    await sleep(750);
     gatewayProc = null;
   }
+
+  // Also kill any other gateway processes (e.g., started by onboard command)
+  // by finding processes listening on the gateway port
+  console.log(`[gateway] Killing any other gateway processes on port ${INTERNAL_GATEWAY_PORT}`);
+  try {
+    const killResult = await runCmd("pkill", ["-f", "openclaw-gateway"]);
+    console.log(`[gateway] pkill result: exit code ${killResult.code}`);
+  } catch (err) {
+    console.log(`[gateway] pkill failed: ${err.message}`);
+  }
+
+  // Give processes time to exit and release the port
+  await sleep(1500);
+
   return ensureGatewayRunning();
 }
 
@@ -872,11 +888,13 @@ proxy.on("error", (err, _req, _res) => {
 
 // Inject auth token into HTTP proxy requests
 proxy.on("proxyReq", (proxyReq, req, res) => {
+  console.log(`[proxy] HTTP ${req.method} ${req.url} - injecting token: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}...`);
   proxyReq.setHeader("Authorization", `Bearer ${OPENCLAW_GATEWAY_TOKEN}`);
 });
 
 // Inject auth token into WebSocket upgrade requests
 proxy.on("proxyReqWs", (proxyReq, req, socket, options, head) => {
+  console.log(`[proxy] WebSocket upgrade ${req.url} - injecting token: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}...`);
   proxyReq.setHeader("Authorization", `Bearer ${OPENCLAW_GATEWAY_TOKEN}`);
 });
 
