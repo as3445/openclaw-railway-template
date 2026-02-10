@@ -137,12 +137,52 @@ async function waitForGatewayReady(opts = {}) {
   return false;
 }
 
+async function syncWorkspaceRepo() {
+  const repo = process.env.WORKSPACE_REPO?.trim();
+  if (!repo) return;
+
+  // Build authenticated URL if GITHUB_TOKEN is available
+  let repoUrl = repo;
+  const ghToken = process.env.GITHUB_TOKEN?.trim();
+  if (ghToken && repo.includes("github.com")) {
+    repoUrl = repo.replace("https://", `https://${ghToken}@`);
+  }
+
+  fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+  const gitDir = path.join(WORKSPACE_DIR, ".git");
+  if (fs.existsSync(gitDir)) {
+    console.log("[workspace] Pulling latest from WORKSPACE_REPO...");
+    const pull = await runCmd("git", ["-C", WORKSPACE_DIR, "pull", "--ff-only", "origin", "main"]);
+    console.log(`[workspace] pull result: exit=${pull.code} ${pull.output.slice(0, 200)}`);
+  } else {
+    console.log("[workspace] Cloning WORKSPACE_REPO into workspace...");
+    const tmpDir = path.join(os.tmpdir(), `ws-clone-${Date.now()}`);
+    const clone = await runCmd("git", ["clone", repoUrl, tmpDir]);
+    if (clone.code === 0) {
+      // Copy contents (including .git) into workspace, preserving existing files
+      const copy = await runCmd("cp", ["-a", `${tmpDir}/.`, WORKSPACE_DIR + "/"]);
+      await runCmd("rm", ["-rf", tmpDir]);
+      // Set git identity
+      await runCmd("git", ["-C", WORKSPACE_DIR, "config", "user.email", "nox@openclaw.ai"]);
+      await runCmd("git", ["-C", WORKSPACE_DIR, "config", "user.name", "Nox"]);
+      console.log(`[workspace] clone result: exit=${clone.code}`);
+    } else {
+      console.error(`[workspace] clone failed: ${clone.output}`);
+      await runCmd("rm", ["-rf", tmpDir]);
+    }
+  }
+}
+
 async function startGateway() {
   if (gatewayProc) return;
   if (!isConfigured()) throw new Error("Gateway cannot start: not configured");
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+  // Sync workspace from private repo if configured
+  await syncWorkspaceRepo();
 
   // Sync wrapper token to openclaw.json before every gateway start.
   // This ensures the gateway's config-file token matches what the wrapper injects via proxy.
