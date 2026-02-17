@@ -23,11 +23,12 @@ WORKDIR /openclaw
 # Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
 ARG OPENCLAW_GIT_REF=main
 
-# Fetch latest commit SHA from GitHub API (cache=no-store prevents HTTP caching),
-# then clone. The ADD instruction busts Docker layer cache when content changes.
-ADD https://api.github.com/repos/as3445/openclaw/git/refs/heads/main /tmp/openclaw-version.json
-RUN cat /tmp/openclaw-version.json && \
-    git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/as3445/openclaw.git . \
+# Railway injects RAILWAY_GIT_COMMIT_SHA automatically as a build arg.
+# Declaring it here busts the Docker layer cache on every new template commit,
+# ensuring the git clone always fetches the latest openclaw code.
+ARG RAILWAY_GIT_COMMIT_SHA=dev
+RUN echo "Template commit: ${RAILWAY_GIT_COMMIT_SHA}" \
+    && git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/as3445/openclaw.git . \
     && echo "Cloned openclaw at $(git rev-parse HEAD)"
 
 # Patch: relax version requirements for packages that may reference unpublished versions.
