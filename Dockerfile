@@ -22,6 +22,11 @@ WORKDIR /openclaw
 
 # Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
 ARG OPENCLAW_GIT_REF=main
+
+# Cache-bust: Docker caches ADD by content, so when the upstream commit SHA
+# changes this layer (and everything after it) rebuilds automatically.
+ADD https://api.github.com/repos/as3445/openclaw/git/refs/heads/${OPENCLAW_GIT_REF} /tmp/openclaw-ref.json
+
 RUN git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/as3445/openclaw.git .
 
 # Patch: relax version requirements for packages that may reference unpublished versions.
