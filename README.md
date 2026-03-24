@@ -82,3 +82,4 @@ docker run --rm -p 8080:8080 \
 
 # open http://localhost:8080/setup (password: test)
 ```
+# Force rebuild Mon Mar 23 23:10:55 EDT 2026
