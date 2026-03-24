@@ -152,9 +152,15 @@ async function syncWorkspaceRepo() {
 
   const gitDir = path.join(WORKSPACE_DIR, ".git");
   if (fs.existsSync(gitDir)) {
-    console.log("[workspace] Pulling latest from WORKSPACE_REPO...");
+    console.log("[workspace] Syncing with WORKSPACE_REPO...");
+    // Fetch first, then try fast-forward. If that fails (local changes), reset to origin/main.
+    await runCmd("git", ["-C", WORKSPACE_DIR, "fetch", "origin", "main"]);
     const pull = await runCmd("git", ["-C", WORKSPACE_DIR, "pull", "--ff-only", "origin", "main"]);
-    console.log(`[workspace] pull result: exit=${pull.code} ${pull.output.slice(0, 200)}`);
+    if (pull.code !== 0) {
+      console.log("[workspace] Fast-forward failed, resetting to origin/main...");
+      await runCmd("git", ["-C", WORKSPACE_DIR, "reset", "--hard", "origin/main"]);
+    }
+    console.log(`[workspace] sync result: exit=${pull.code} ${pull.output.slice(0, 200)}`);
   } else {
     console.log("[workspace] Cloning WORKSPACE_REPO into workspace...");
     const tmpDir = path.join(os.tmpdir(), `ws-clone-${Date.now()}`);
