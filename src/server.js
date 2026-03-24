@@ -114,7 +114,7 @@ function sleep(ms) {
 }
 
 async function waitForGatewayReady(opts = {}) {
-  const timeoutMs = opts.timeoutMs ?? 20_000;
+  const timeoutMs = opts.timeoutMs ?? 60_000;
   const start = Date.now();
   const endpoints = ["/openclaw", "/openclaw", "/", "/health"];
   
@@ -189,18 +189,25 @@ async function startGateway() {
   console.log(`[gateway] ========== GATEWAY START TOKEN SYNC ==========`);
   console.log(`[gateway] Syncing wrapper token to config: ${OPENCLAW_GATEWAY_TOKEN.slice(0, 16)}... (len: ${OPENCLAW_GATEWAY_TOKEN.length})`);
 
-  const syncResult = await runCmd(
-    OPENCLAW_NODE,
-    clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]),
-  );
-
-  console.log(`[gateway] Sync result: exit code ${syncResult.code}`);
-  if (syncResult.output?.trim()) {
-    console.log(`[gateway] Sync output: ${syncResult.output}`);
-  }
-
-  if (syncResult.code !== 0) {
-    console.error(`[gateway] ⚠️  WARNING: Token sync failed with code ${syncResult.code}`);
+  // Fast token sync: direct JSON write instead of spawning full openclaw CLI
+  try {
+    const cfgRaw = fs.readFileSync(configPath(), "utf8");
+    const cfg = JSON.parse(cfgRaw);
+    if (!cfg.gateway) cfg.gateway = {};
+    if (!cfg.gateway.auth) cfg.gateway.auth = {};
+    cfg.gateway.auth.token = OPENCLAW_GATEWAY_TOKEN;
+    fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), "utf8");
+    console.log("[gateway] Sync result: direct write OK");
+  } catch (syncErr) {
+    console.error(`[gateway] Direct token sync failed, falling back to CLI: ${syncErr}`);
+    const syncResult = await runCmd(
+      OPENCLAW_NODE,
+      clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]),
+    );
+    console.log(`[gateway] Sync result (CLI fallback): exit code ${syncResult.code}`);
+    if (syncResult.code !== 0) {
+      console.error(`[gateway] ⚠️  WARNING: Token sync failed with code ${syncResult.code}`);
+    }
   }
 
   // Verify sync succeeded
@@ -272,7 +279,7 @@ async function ensureGatewayRunning() {
   if (!gatewayStarting) {
     gatewayStarting = (async () => {
       await startGateway();
-      const ready = await waitForGatewayReady({ timeoutMs: 20_000 });
+      const ready = await waitForGatewayReady({ timeoutMs: 60_000 });
       if (!ready) {
         throw new Error("Gateway did not become ready in time");
       }
@@ -969,6 +976,12 @@ const server = app.listen(PORT, () => {
   console.log(`[wrapper] listening on port ${PORT}`);
   console.log(`[wrapper] setup wizard: http://localhost:${PORT}/setup`);
   console.log(`[wrapper] configured: ${isConfigured()}`);
+  // Eagerly start gateway so it is ready before the first request arrives
+  if (isConfigured()) {
+    ensureGatewayRunning().catch((err) => {
+      console.error(`[wrapper] eager gateway start failed: ${err}`);
+    });
+  }
 });
 
 // Handle WebSocket upgrades
