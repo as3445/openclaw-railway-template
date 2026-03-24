@@ -23,11 +23,9 @@ WORKDIR /openclaw
 # Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
 ARG OPENCLAW_GIT_REF=main
 
-# .openclaw-version contains the target commit SHA from as3445/openclaw.
-# COPY-ing it here busts the Docker layer cache whenever the CI workflow
-# pushes a new SHA, forcing the git clone below to re-run.
-COPY .openclaw-version /tmp/.openclaw-version
-RUN OPENCLAW_SHA=$(cat /tmp/.openclaw-version | tr -d '[:space:]') \
+# Pin to a known valid SHA (2026.3.23 release, main branch head as of 2026-03-23).
+# This replaces the .openclaw-version injection mechanism to fix broken builds.
+RUN OPENCLAW_SHA="534d8d84c9caadc0de856193308ddcc3eddd2ef5" \
     && echo "Target openclaw SHA: ${OPENCLAW_SHA}" \
     && git clone --depth 50 --branch "${OPENCLAW_GIT_REF}" https://github.com/as3445/openclaw.git . \
     && git checkout "${OPENCLAW_SHA}" \
