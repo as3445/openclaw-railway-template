@@ -16,7 +16,7 @@ RUN apt-get update \
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-RUN corepack enable
+RUN npm install -g pnpm
 
 WORKDIR /openclaw
 
@@ -83,7 +83,7 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 WORKDIR /app
 
 # Wrapper deps
-RUN corepack enable
+RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 
