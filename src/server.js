@@ -342,7 +342,12 @@ function requireSetupAuth(req, res, next) {
 
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "1mb" }));
+
+// Only parse JSON bodies for /setup routes — global express.json() consumes
+// the request body stream, which breaks http-proxy forwarding for POST/PUT/PATCH
+// to the gateway (the proxy sees an already-drained stream and hangs).
+const setupJsonParser = express.json({ limit: "1mb" });
+app.use("/setup", setupJsonParser);
 
 // Minimal health endpoint for Railway.
 app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
