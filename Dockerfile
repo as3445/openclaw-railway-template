@@ -35,8 +35,15 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 # Install openclaw from npm
 RUN npm install -g openclaw
 
-# Install dhanoosh plugin (adaptive policy feedback)
-RUN openclaw plugins install as3445/dhanoosh
+# Install plugins
+RUN openclaw plugins install as3445/dhanoosh \
+  && openclaw plugins install elevenlabs \
+  && openclaw plugins install firecrawl \
+  && openclaw plugins install openrouter \
+  && openclaw plugins install openai \
+  && openclaw plugins install diffs \
+  && openclaw plugins install memory-core \
+  && openclaw plugins install brave
 
 WORKDIR /app
 
