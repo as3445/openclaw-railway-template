@@ -35,8 +35,8 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 # Install openclaw from npm
 RUN npm install -g openclaw
 
-# Install dhanoosh plugin (not on npm — clone from GitHub)
-RUN git clone --depth 1 https://github.com/as3445/dhanoosh.git /root/.openclaw/extensions/dhanoosh
+# Stage dhanoosh plugin source (will be copied to volume at startup)
+RUN git clone --depth 1 https://github.com/as3445/dhanoosh.git /opt/dhanoosh
 
 WORKDIR /app
 
@@ -49,4 +49,8 @@ COPY src ./src
 
 ENV PORT=8080
 EXPOSE 8080
-CMD ["node", "src/server.js"]
+
+# At startup: copy dhanoosh plugin into the volume-mounted extensions dir,
+# then start the server. The extensions dir lives on the persistent volume
+# (/data/workspace/.openclaw/extensions/) which isn't available at build time.
+CMD ["sh", "-c", "mkdir -p /data/workspace/.openclaw/extensions && cp -r /opt/dhanoosh /data/workspace/.openclaw/extensions/dhanoosh 2>/dev/null; exec node src/server.js"]
