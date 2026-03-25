@@ -20,16 +20,10 @@ RUN npm install -g pnpm
 
 WORKDIR /openclaw
 
-# Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
-ARG OPENCLAW_GIT_REF=main
-
-# Pin to a known valid SHA (2026.3.23 release, main branch head as of 2026-03-23).
-# This replaces the .openclaw-version injection mechanism to fix broken builds.
-RUN OPENCLAW_SHA="534d8d84c9caadc0de856193308ddcc3eddd2ef5" \
-    && echo "Target openclaw SHA: ${OPENCLAW_SHA}" \
-    && git clone --depth 50 --branch "${OPENCLAW_GIT_REF}" https://github.com/as3445/openclaw.git . \
-    && git checkout "${OPENCLAW_SHA}" \
-    && echo "Checked out openclaw at $(git rev-parse HEAD)"
+# Clone latest main. The CI workflow triggers a redeploy on every push to main,
+# so this always builds the newest commit without needing a pinned SHA.
+RUN git clone --depth 1 --branch main https://github.com/as3445/openclaw.git . \
+    && echo "Building openclaw at $(git rev-parse HEAD)"
 
 # Patch: relax version requirements for packages that may reference unpublished versions.
 # Apply to all extension package.json files to handle workspace protocol (workspace:*).
