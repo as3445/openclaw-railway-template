@@ -36,7 +36,7 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 RUN npm install -g openclaw
 
 # Install dhanoosh plugin (adaptive policy feedback)
-RUN openclaw plugin install as3445/dhanoosh
+RUN openclaw plugins install as3445/dhanoosh
 
 WORKDIR /app
 
