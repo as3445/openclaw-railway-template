@@ -53,4 +53,4 @@ EXPOSE 8080
 # At startup: copy dhanoosh plugin into the volume-mounted extensions dir,
 # then start the server. The extensions dir lives on the persistent volume
 # (/data/workspace/.openclaw/extensions/) which isn't available at build time.
-CMD ["sh", "-c", "mkdir -p /data/workspace/.openclaw/extensions && cp -r /opt/dhanoosh /data/workspace/.openclaw/extensions/dhanoosh 2>/dev/null; exec node src/server.js"]
+CMD ["sh", "-c", "mkdir -p /data/workspace/.openclaw/extensions && rm -rf /data/workspace/.openclaw/extensions/dhanoosh && cp -r /opt/dhanoosh /data/workspace/.openclaw/extensions/dhanoosh && echo '[dhanoosh] installed to extensions dir' && ls /data/workspace/.openclaw/extensions/dhanoosh/; exec node src/server.js"]
