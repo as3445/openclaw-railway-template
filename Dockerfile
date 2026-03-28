@@ -35,11 +35,6 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 # Install openclaw from npm
 RUN npm install -g openclaw
 
-# Stage triage-gate plugin (will be copied to volume at startup)
-RUN npm install --prefix /opt/openclaw-triage-gate openclaw-triage-gate@latest && \
-    mv /opt/openclaw-triage-gate/node_modules/openclaw-triage-gate /opt/openclaw-triage-gate-pkg && \
-    rm -rf /opt/openclaw-triage-gate
-
 WORKDIR /app
 
 # Wrapper deps
@@ -52,7 +47,6 @@ COPY src ./src
 ENV PORT=8080
 EXPOSE 8080
 
-# At startup: install triage-gate plugin to the global extensions dir on the
-# persistent volume. Only copy if the dir doesn't already exist (so manual
-# fixes and openclaw plugin install updates persist across redeploys).
-CMD ["sh", "-c", "mkdir -p /data/.openclaw/extensions && if [ ! -d /data/.openclaw/extensions/openclaw-triage-gate ]; then cp -r /opt/openclaw-triage-gate-pkg /data/.openclaw/extensions/openclaw-triage-gate && echo '[triage-gate] installed to global extensions'; else echo '[triage-gate] already installed, skipping copy'; fi; rm -rf /tmp/jiti; exec node src/server.js"]
+# At startup: install/update triage-gate plugin from npm into the persistent
+# extensions dir. Uses '*' to grab the absolute latest version (any dist-tag).
+CMD ["sh", "-c", "mkdir -p /data/.openclaw/extensions && echo '[triage-gate] installing latest version...' && npm install --prefix /tmp/triage-gate-install openclaw-triage-gate@'*' 2>&1 | tail -1 && rm -rf /data/.openclaw/extensions/openclaw-triage-gate && cp -r /tmp/triage-gate-install/node_modules/openclaw-triage-gate /data/.openclaw/extensions/openclaw-triage-gate && rm -rf /tmp/triage-gate-install && echo '[triage-gate] installed' ; rm -rf /tmp/jiti; exec node src/server.js"]
