@@ -202,20 +202,6 @@ async function startGateway() {
     if (!cfg.gateway) cfg.gateway = {};
     if (!cfg.gateway.auth) cfg.gateway.auth = {};
     cfg.gateway.auth.token = OPENCLAW_GATEWAY_TOKEN;
-
-    // Enable 1hr prompt cache retention for Anthropic models (saves ~47% on cache costs)
-    if (!cfg.agents) cfg.agents = {};
-    if (!cfg.agents.defaults) cfg.agents.defaults = {};
-    if (!cfg.agents.defaults.models) cfg.agents.defaults.models = {};
-    for (const model of ["anthropic/claude-opus-4-6", "anthropic/claude-sonnet-4-20250514"]) {
-      if (!cfg.agents.defaults.models[model]) cfg.agents.defaults.models[model] = {};
-      if (!cfg.agents.defaults.models[model].params) cfg.agents.defaults.models[model].params = {};
-      if (cfg.agents.defaults.models[model].params.cacheRetention !== "long") {
-        cfg.agents.defaults.models[model].params.cacheRetention = "long";
-        console.log(`[gateway] Set cacheRetention=long for ${model}`);
-      }
-    }
-
     fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), "utf8");
     console.log("[gateway] Sync result: direct write OK");
   } catch (syncErr) {
