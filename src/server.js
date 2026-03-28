@@ -854,6 +854,16 @@ app.get("/setup/api/debug", requireSetupAuth, async (_req, res) => {
   });
 });
 
+// Run openclaw config commands remotely (protected by setup auth)
+app.post("/setup/api/config-set", requireSetupAuth, async (req, res) => {
+  const { key, value } = req.body || {};
+  if (!key || value === undefined) {
+    return res.status(400).json({ error: "key and value required" });
+  }
+  const result = await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", key, String(value)]));
+  res.json({ key, value, exitCode: result.code, output: result.output.trim() });
+});
+
 app.post("/setup/api/pairing/approve", requireSetupAuth, async (req, res) => {
   const { channel, code } = req.body || {};
   if (!channel || !code) {
