@@ -47,6 +47,4 @@ COPY src ./src
 ENV PORT=8080
 EXPOSE 8080
 
-# At startup: install/update triage-gate plugin from npm into the persistent
-# extensions dir. Uses '*' to grab the absolute latest version (any dist-tag).
-CMD ["sh", "-c", "mkdir -p /data/.openclaw/extensions && echo '[triage-gate] installing latest version...' && npm install --prefix /tmp/triage-gate-install openclaw-triage-gate@'*' 2>&1 | tail -1 && rm -rf /data/.openclaw/extensions/openclaw-triage-gate && cp -r /tmp/triage-gate-install/node_modules/openclaw-triage-gate /data/.openclaw/extensions/openclaw-triage-gate && rm -rf /tmp/triage-gate-install && echo '[triage-gate] installed' ; rm -rf /tmp/jiti; exec node src/server.js"]
+CMD ["sh", "-c", "rm -rf /tmp/jiti; exec node src/server.js"]
