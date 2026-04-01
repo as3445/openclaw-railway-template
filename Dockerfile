@@ -35,6 +35,9 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 # Install openclaw from npm
 RUN npm install -g openclaw
 
+# Install community plugins
+RUN npm install -g openclaw-plugin-google
+
 WORKDIR /app
 
 # Wrapper deps
