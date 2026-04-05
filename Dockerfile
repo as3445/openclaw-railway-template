@@ -32,8 +32,9 @@ USER root
 RUN chown -R root:root /home/linuxbrew/.linuxbrew
 ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
-# Install openclaw from npm (latest version)
-RUN npm install -g openclaw@latest
+# Install openclaw from npm — cache-bust via OPENCLAW_VERSION arg
+ARG OPENCLAW_VERSION=latest
+RUN npm install -g openclaw@${OPENCLAW_VERSION} && npm cache clean --force
 
 # Install community plugins
 RUN npm install -g openclaw-plugin-google
