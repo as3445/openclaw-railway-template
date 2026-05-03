@@ -1,54 +1,35 @@
-# Runtime image — installs openclaw from npm (no source build needed).
+# Runtime image. openclaw is installed at startup into the persistent volume,
+# allowing version control via the OPENCLAW_VERSION environment variable.
 FROM node:22-bookworm
 ENV NODE_ENV=production
 
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    build-essential \
-    gcc \
-    g++ \
-    make \
-    procps \
-    file \
-    git \
-    python3 \
-    pkg-config \
-    sudo \
+       ca-certificates \
+       curl \
+       git \
+       procps \
+       build-essential \
+       python3 \
+       pkg-config \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Railway CLI
 RUN npm install -g @railway/cli && npm cache clean --force
 
-# Install Homebrew (must run as non-root user)
-RUN useradd -m -s /bin/bash linuxbrew \
-  && echo 'linuxbrew ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
-USER linuxbrew
-RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-USER root
-RUN chown -R root:root /home/linuxbrew/.linuxbrew
-ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
-
-# Install openclaw from npm — cache-bust via OPENCLAW_VERSION arg
-ARG OPENCLAW_VERSION=latest
-RUN npm install -g openclaw@${OPENCLAW_VERSION} && npm cache clean --force
-
-# Install community plugins
-RUN npm install -g openclaw-plugin-google
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 WORKDIR /app
 
-# Wrapper deps
-RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile && pnpm store prune
+RUN pnpm install --frozen-lockfile --prod
 
 COPY src ./src
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /data \
+  && chown -R node:node /app /data
 
+USER node
 ENV PORT=8080
 EXPOSE 8080
-
-CMD ["sh", "-c", "rm -rf /tmp/jiti; exec node src/server.js"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
