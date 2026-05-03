@@ -132,13 +132,21 @@ async function syncWorkspaceRepo() {
   const gitDir = path.join(WORKSPACE_DIR, ".git");
   if (fs.existsSync(gitDir)) {
     console.log("[workspace] Syncing with WORKSPACE_REPO...");
-    // Fetch first, then try fast-forward. If that fails (local changes), reset to origin/main.
     await runCmd("git", ["-C", WORKSPACE_DIR, "fetch", "origin", "main"]);
-    const pull = await runCmd("git", ["-C", WORKSPACE_DIR, "pull", "--ff-only", "origin", "main"]);
-    if (pull.code !== 0) {
-      console.log("[workspace] Fast-forward failed, resetting to origin/main...");
-      await runCmd("git", ["-C", WORKSPACE_DIR, "reset", "--hard", "origin/main"]);
+
+    // Refuse to pull on a dirty tree — the workspace persists openclaw session
+    // state (memory, transcripts, logs); a hard reset would destroy it. The
+    // operator can resolve manually, or commit/clean before redeploying.
+    const dirty = await runCmd("git", ["-C", WORKSPACE_DIR, "status", "--porcelain"]);
+    if (dirty.output.trim()) {
+      console.warn(
+        "[workspace] working tree has local changes; skipping pull to preserve session state. " +
+          "Resolve manually with: git -C " + WORKSPACE_DIR + " status",
+      );
+      return;
     }
+
+    const pull = await runCmd("git", ["-C", WORKSPACE_DIR, "pull", "--ff-only", "origin", "main"]);
     console.log(`[workspace] sync result: exit=${pull.code} ${pull.output.slice(0, 200)}`);
   } else {
     console.log("[workspace] Cloning WORKSPACE_REPO into workspace...");
@@ -903,12 +911,30 @@ server.on("upgrade", async (req, socket, head) => {
   });
 });
 
+// Give the gateway a window to flush sessions/memory before forcing exit.
+const SHUTDOWN_GRACE_MS = 8000;
 process.on("SIGTERM", () => {
-  // Best-effort shutdown
-  try {
-    if (gatewayProc) gatewayProc.kill("SIGTERM");
-  } catch {
-    // ignore
+  if (!gatewayProc) {
+    process.exit(0);
+    return;
   }
-  process.exit(0);
+  let exited = false;
+  gatewayProc.once("exit", () => {
+    exited = true;
+    process.exit(0);
+  });
+  try {
+    gatewayProc.kill("SIGTERM");
+  } catch {
+    // already gone
+  }
+  setTimeout(() => {
+    if (exited) return;
+    try {
+      gatewayProc?.kill("SIGKILL");
+    } catch {
+      // already gone
+    }
+    process.exit(0);
+  }, SHUTDOWN_GRACE_MS).unref();
 });
