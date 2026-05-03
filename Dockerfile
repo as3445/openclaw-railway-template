@@ -25,11 +25,10 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY src ./src
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-  && mkdir -p /data \
-  && chown -R node:node /app /data
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
 
-USER node
+# We run as root so the entrypoint can mkdir/install into /data, which
+# Railway mounts as root-owned at runtime regardless of build-time chown.
 ENV PORT=8080
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
