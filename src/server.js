@@ -559,88 +559,59 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
 
     // Optional channel setup (only after successful onboarding, and only if the installed CLI supports it).
     if (ok) {
-      // Ensure gateway token is written into config so the browser UI can authenticate reliably.
-      // (We also enforce loopback bind since the wrapper proxies externally.)
-      await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.mode", "local"]));
-      await runCmd(
-        OPENCLAW_NODE,
-        clawArgs(["config", "set", "gateway.auth.mode", "token"]),
-      );
+      // Apply gateway settings via direct JSON edit instead of `openclaw config set`
+      // chains — each CLI invocation pays a ~10s plugin-init cost we don't need here.
+      try {
+        const cfg = JSON.parse(fs.readFileSync(configPath(), "utf8"));
+        cfg.gateway = cfg.gateway || {};
+        cfg.gateway.mode = "local";
+        cfg.gateway.bind = "loopback";
+        cfg.gateway.port = INTERNAL_GATEWAY_PORT;
+        cfg.gateway.auth = cfg.gateway.auth || {};
+        cfg.gateway.auth.mode = "token";
+        cfg.gateway.auth.token = OPENCLAW_GATEWAY_TOKEN;
+        fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), "utf8");
 
-      const setTokenResult = await runCmd(
-        OPENCLAW_NODE,
-        clawArgs([
-          "config",
-          "set",
-          "gateway.auth.token",
-          OPENCLAW_GATEWAY_TOKEN,
-        ]),
-      );
-
-      if (setTokenResult.code !== 0) {
-        extra += `\n[WARNING] Failed to set gateway token in config (exit ${setTokenResult.code})\n`;
-      } else {
-        try {
-          const cfg = JSON.parse(fs.readFileSync(configPath(), "utf8"));
-          if (cfg?.gateway?.auth?.token !== OPENCLAW_GATEWAY_TOKEN) {
-            extra += `\n[ERROR] Token verification failed: config token does not match wrapper.\n`;
-          }
-        } catch (err) {
-          extra += `\n[ERROR] Could not verify token in config: ${String(err)}\n`;
+        const verify = JSON.parse(fs.readFileSync(configPath(), "utf8"));
+        if (verify?.gateway?.auth?.token !== OPENCLAW_GATEWAY_TOKEN) {
+          extra += `\n[ERROR] Token verification failed after writing gateway config.\n`;
         }
+      } catch (err) {
+        extra += `\n[ERROR] Failed to apply gateway config: ${String(err)}\n`;
       }
 
-      await runCmd(
-        OPENCLAW_NODE,
-        clawArgs(["config", "set", "gateway.bind", "loopback"]),
-      );
-      await runCmd(
-        OPENCLAW_NODE,
-        clawArgs([
-          "config",
-          "set",
-          "gateway.port",
-          String(INTERNAL_GATEWAY_PORT),
-        ]),
-      );
+      // We still need `channels add --help` to know which channels this build supports.
       const channelsHelp = await runCmd(
         OPENCLAW_NODE,
         clawArgs(["channels", "add", "--help"]),
       );
       const helpText = channelsHelp.output || "";
-
       const supports = (name) => helpText.includes(name);
+
+      const writeChannel = (name, channelCfg) => {
+        try {
+          const cfg = JSON.parse(fs.readFileSync(configPath(), "utf8"));
+          cfg.channels = cfg.channels || {};
+          cfg.channels[name] = channelCfg;
+          fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), "utf8");
+          extra += `\n[${name}] config written\n`;
+        } catch (err) {
+          extra += `\n[${name}] config write failed: ${String(err)}\n`;
+        }
+      };
 
       if (payload.telegramToken?.trim()) {
         if (!supports("telegram")) {
           extra +=
             "\n[telegram] skipped (this openclaw build does not list telegram in `channels add --help`)\n";
         } else {
-          // Avoid `channels add` here (it has proven flaky across builds); write config directly.
-          const token = payload.telegramToken.trim();
-          const cfgObj = {
+          writeChannel("telegram", {
             enabled: true,
             dmPolicy: "pairing",
-            botToken: token,
+            botToken: payload.telegramToken.trim(),
             groupPolicy: "allowlist",
             streamMode: "partial",
-          };
-          const set = await runCmd(
-            OPENCLAW_NODE,
-            clawArgs([
-              "config",
-              "set",
-              "--json",
-              "channels.telegram",
-              JSON.stringify(cfgObj),
-            ]),
-          );
-          const get = await runCmd(
-            OPENCLAW_NODE,
-            clawArgs(["config", "get", "channels.telegram"]),
-          );
-          extra += `\n[telegram config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-          extra += `\n[telegram verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+          });
         }
       }
 
@@ -649,31 +620,12 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           extra +=
             "\n[discord] skipped (this openclaw build does not list discord in `channels add --help`)\n";
         } else {
-          const token = payload.discordToken.trim();
-          const cfgObj = {
+          writeChannel("discord", {
             enabled: true,
-            token,
+            token: payload.discordToken.trim(),
             groupPolicy: "allowlist",
-            dm: {
-              policy: "pairing",
-            },
-          };
-          const set = await runCmd(
-            OPENCLAW_NODE,
-            clawArgs([
-              "config",
-              "set",
-              "--json",
-              "channels.discord",
-              JSON.stringify(cfgObj),
-            ]),
-          );
-          const get = await runCmd(
-            OPENCLAW_NODE,
-            clawArgs(["config", "get", "channels.discord"]),
-          );
-          extra += `\n[discord config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-          extra += `\n[discord verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+            dm: { policy: "pairing" },
+          });
         }
       }
 
@@ -682,27 +634,12 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
           extra +=
             "\n[slack] skipped (this openclaw build does not list slack in `channels add --help`)\n";
         } else {
-          const cfgObj = {
-            enabled: true,
-            botToken: payload.slackBotToken?.trim() || undefined,
-            appToken: payload.slackAppToken?.trim() || undefined,
-          };
-          const set = await runCmd(
-            OPENCLAW_NODE,
-            clawArgs([
-              "config",
-              "set",
-              "--json",
-              "channels.slack",
-              JSON.stringify(cfgObj),
-            ]),
-          );
-          const get = await runCmd(
-            OPENCLAW_NODE,
-            clawArgs(["config", "get", "channels.slack"]),
-          );
-          extra += `\n[slack config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
-          extra += `\n[slack verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+          const channelCfg = { enabled: true };
+          const bot = payload.slackBotToken?.trim();
+          const app = payload.slackAppToken?.trim();
+          if (bot) channelCfg.botToken = bot;
+          if (app) channelCfg.appToken = app;
+          writeChannel("slack", channelCfg);
         }
       }
 
