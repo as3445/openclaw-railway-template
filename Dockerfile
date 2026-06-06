@@ -18,6 +18,13 @@ RUN npm install -g @railway/cli && npm cache clean --force
 
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
+# QMD markdown-search backend — standalone binary, not version-coupled to openclaw,
+# so it stays baked in the image (must be on PATH; OpenClaw shells out to `qmd`).
+# Keeps local memory/ + MEMORY.md searchable once the Honcho plugin takes the
+# kind:"memory" slot. The Honcho plugin itself is installed at runtime by
+# docker-entrypoint.sh, into the same npm prefix as openclaw. See docs/HONCHO.md.
+RUN npm install -g @tobilu/qmd
+
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./

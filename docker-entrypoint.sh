@@ -20,7 +20,8 @@ if [ ! -f "$ENTRY" ]; then
   mkdir -p "$PREFIX"
   NPM_CONFIG_PREFIX="$PREFIX" npm install -g \
     "openclaw@$VERSION" \
-    openclaw-plugin-google
+    openclaw-plugin-google \
+    @honcho-ai/openclaw-honcho
 fi
 
 if [ ! -f "$ENTRY" ]; then
