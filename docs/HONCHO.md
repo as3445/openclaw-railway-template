@@ -16,7 +16,7 @@ project. Honcho supplements file-based memory; it does not replace it.
 
 ```
 Railway project "Nox" (one environment)
-├── Nox (this wrapper)   ← existing; entrypoint installs the Honcho plugin at runtime, image bakes QMD
+├── Nox (this wrapper)   ← existing; image bakes QMD, Honcho plugin lives as a workspace extension (§3.1)
 ├── honcho-api           ← NEW · plastic-labs/honcho · internal :8000 · runs DB migrations on boot
 ├── honcho-deriver       ← NEW · plastic-labs/honcho · background worker · no port · no migrations
 ├── postgres (pgvector)  ← NEW · image service
@@ -136,35 +136,62 @@ complete before testing.
 
 ## Phase 3 — Wire the plugin into the gateway
 
-The Honcho plugin is installed **at runtime** by `docker-entrypoint.sh` into the
-`/data` volume (same npm prefix as openclaw, alongside `openclaw-plugin-google`), and
-the QMD binary is baked into the image. What remains is **configuration of the running
-gateway**, applied to the gateway *state* config on the volume
-(`/data/.openclaw/openclaw.json`) — **not** the workspace `openclaw.json`, and **not**
-the Nox repo (which is a read-only pull mirror).
+> **Hard-won lesson — read this before anything else.** Two things that the obvious
+> approach gets wrong:
+> 1. **`npm install -g @honcho-ai/openclaw-honcho` (in the Dockerfile/entrypoint) and
+>    `openclaw plugins install` are BOTH insufficient.** They land the plugin in
+>    `<runtime>/node_modules` or `<stateDir>/npm/projects/`, which the gateway sees
+>    *transiently* but **cold-start discovery does not re-scan** → after any restart you
+>    get `plugin not found: openclaw-honcho (stale config entry ignored)`. The plugin
+>    must live as a **workspace extension** in `/data/workspace/.openclaw/extensions/openclaw-honcho/`
+>    (the dir the loader scans on every boot — where dhanoosh/opik/etc. live).
+> 2. **Enabling/allowing the plugin does NOT give it the memory slot.** The slot owner
+>    is set *only* by **`plugins.slots.memory`**, which hard-defaults to `"memory-core"`.
+>    Disabling or removing memory-core does nothing on its own. You must explicitly set
+>    `plugins.slots.memory = "openclaw-honcho"` (that also auto-disables memory-core).
+>    `openclaw honcho setup` does **not** set this — it only writes plugin config.
 
-> **Picking up the plugin on an existing volume.** The entrypoint only runs its
-> install step when the openclaw runtime is missing (`if [ ! -f "$ENTRY" ]`). On a
-> volume that already has openclaw installed, the new `@honcho-ai/openclaw-honcho`
-> won't appear until that triggers. Force it by **bumping `OPENCLAW_VERSION`** (the
-> prefix path changes, so it reinstalls and prunes the old version), or by deleting
-> `/data/openclaw-runtime/<version>` and redeploying.
+### 3.1 Install the plugin as a workspace extension
 
-Apply config against the live gateway. Two equivalent routes:
+The image still bakes the **QMD binary** (`@tobilu/qmd`) — that part is correct. For
+the plugin itself, place it in the scanned extensions dir as a self-contained package.
+`openclaw plugins install` fetches it (to `<stateDir>/npm/projects/...`); copy that
+into the workspace extensions dir with its deps:
 
-- **A — edit the state config file** via a Railway shell on the Nox service, then
-  restart the gateway. Simplest for a one-time setup.
-- **B — `openclaw gateway call config.patch`** (RPC; needs a `baseHash` from
-  `config.get`, rate-limited to 3 writes/60s). Scriptable but fiddlier.
+```bash
+# in a Railway shell on the Nox service (paths assume OPENCLAW_STATE_DIR=/data/.openclaw)
+ENTRY=/data/openclaw-runtime/<version>/lib/node_modules/openclaw/dist/entry.js
+node "$ENTRY" plugins install @honcho-ai/openclaw-honcho     # fetches the package + deps
 
-### 3.1 Plugin entry (state config)
+SRC=/data/.openclaw/npm/projects/honcho-ai-openclaw-honcho-*/node_modules/@honcho-ai/openclaw-honcho
+DST=/data/workspace/.openclaw/extensions/openclaw-honcho
+rm -rf "$DST" && mkdir -p "$DST" && cp -a $SRC/. "$DST"/
+# add hoisted runtime deps (zod, @sinclair, ...) into the extension's node_modules
+for d in /data/.openclaw/npm/projects/honcho-ai-openclaw-honcho-*/node_modules/*; do
+  case "$(basename "$d")" in @honcho-ai) ;; *) cp -a "$d" "$DST/node_modules/";; esac
+done
+```
+
+The extension must end up with `openclaw.plugin.json`, a built `dist/index.js`, and a
+`node_modules/` containing its deps. (It ships a prebuilt `dist/`, so no build step.)
+
+> Because this lives on the `/data` volume it survives restarts and openclaw version
+> bumps. It does **not** survive a fresh/wiped volume — re-run these steps then.
+
+### 3.2 Gateway config (state config on the volume)
+
+Apply to `/data/.openclaw/openclaw.json` (the *state* config — **not** the workspace
+`openclaw.json`, **not** the Nox repo). Edit it via a Railway shell, then restart.
+The `plugins.slots.memory` line is the one that actually activates Honcho:
 
 ```json
 {
   "plugins": {
+    "slots": { "memory": "openclaw-honcho" },
     "allow": ["openclaw-honcho"],
     "entries": {
       "openclaw-honcho": {
+        "enabled": true,
         "config": {
           "baseUrl": "http://honcho-api.railway.internal:8000",
           "workspaceId": "openclaw"
@@ -175,8 +202,10 @@ Apply config against the live gateway. Two equivalent routes:
 }
 ```
 
-No `apiKey` — `AUTH_USE_AUTH=false` on the server. `baseUrl` uses the internal host
-from Phase 2 (match your actual service name).
+No `apiKey` — `AUTH_USE_AUTH=false` on the server (the plugin logs a harmless
+`No API key configured` warning; calls still return 200). `baseUrl` uses the internal
+host from Phase 2. Setting `plugins.slots.memory` auto-disables `memory-core`; you do
+not need to touch its entry.
 
 ### 3.2 Keep file-memory alive with QMD
 
@@ -270,11 +299,16 @@ Send a test message and watch `honcho-api` logs for ingestion activity, and
 2. **`DB_CONNECTION_URI`**, scheme **`postgresql+psycopg://`** — not `DATABASE_URL`, not `postgresql://`.
 3. **`CACHE_URL` + `CACHE_ENABLED=true`** — Honcho has no `REDIS_URL`.
 4. **API start command must run migrations** (`sh docker/entrypoint.sh`); deriver must not.
-5. **Plugin/memory config goes in the gateway state config on the volume**, applied at
-   runtime — not the workspace `openclaw.json`, not the Nox repo (read-only mirror).
-   And the plugin **binary** installs at runtime via the entrypoint — bump
-   `OPENCLAW_VERSION` to pull it onto an already-installed volume.
-6. **QMD keeps file memory searchable** — but it's a backend swap, not an additive
+5. **The plugin must be a workspace extension** (`/data/workspace/.openclaw/extensions/openclaw-honcho/`)
+   — `npm install -g` and `openclaw plugins install` land it where cold-start discovery
+   won't find it (`plugin not found` after restart). See §3.1.
+6. **`plugins.slots.memory = "openclaw-honcho"` is mandatory** — it's the *only* thing
+   that hands Honcho the memory slot (hard-defaults to `memory-core`). Enabling/allowing
+   the plugin or disabling memory-core does nothing without it. See §3.2.
+7. **Plugin/memory config goes in the gateway state config on the volume**
+   (`/data/.openclaw/openclaw.json`) — not the workspace `openclaw.json`, not the Nox
+   repo (read-only mirror).
+8. **QMD keeps file memory searchable** — but it's a backend swap, not an additive
    toggle; first query pulls ~2GB of models.
-7. **IPv6** on pre-2025-10-16 environments — bind `::` if internal DNS won't connect.
-8. **Internal-only services** — no public domain; cheaper and the secure default.
+9. **IPv6** on pre-2025-10-16 environments — bind `::` if internal DNS won't connect.
+10. **Internal-only services** — no public domain; cheaper and the secure default.
