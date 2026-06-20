@@ -43,7 +43,7 @@ COPY src ./src
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
   && mkdir -p /data \
-  && chown -R app:app /app /data
+  && chown -R app:app /app /data /home/app
 
 # The container enters as root so the entrypoint can chown /data (Railway mounts
 # the volume root-owned at runtime regardless of build-time chown), then the
