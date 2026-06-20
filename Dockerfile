@@ -34,6 +34,14 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 # docker-entrypoint.sh, into the same npm prefix as openclaw. See docs/HONCHO.md.
 RUN npm install -g @tobilu/qmd
 
+# Claude Code CLI — provides the `claude` binary that OpenClaw's claude-cli agent
+# backend spawns for model refs like `claude-cli/claude-opus-4-8`. Standalone and
+# not version-coupled to openclaw, so it stays baked in the image. Authenticates
+# non-interactively via the CLAUDE_CODE_OAUTH_TOKEN env var (a `claude setup-token`
+# from a Claude subscription), letting the agent bill the Claude plan instead of
+# the Anthropic API. The backend clears ANTHROPIC_API_KEY so subscription auth is used.
+RUN npm install -g @anthropic-ai/claude-code && npm cache clean --force
+
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
