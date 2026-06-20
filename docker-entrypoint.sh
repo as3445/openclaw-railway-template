@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+# Railway mounts the /data volume root-owned at runtime, regardless of any
+# build-time chown. Fix ownership while we still have root, then re-exec this
+# same script as the unprivileged `app` user so everything below — npm installs
+# into /data, pruning, and the Node wrapper itself — runs without root.
+if [ "$(id -u)" = "0" ]; then
+  mkdir -p /data
+  chown -R app:app /data
+  exec gosu app "$0" "$@"
+fi
+
 VERSION="${OPENCLAW_VERSION:-latest}"
 if [ "$VERSION" = "latest" ]; then
   echo "[entrypoint] resolving latest openclaw version..."

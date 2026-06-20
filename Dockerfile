@@ -2,6 +2,8 @@
 # allowing version control via the OPENCLAW_VERSION environment variable.
 FROM node:22-bookworm
 ENV NODE_ENV=production
+# Home for the unprivileged `app` user; npm/pnpm caches land here at runtime.
+ENV HOME=/home/app
 
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -12,7 +14,14 @@ RUN apt-get update \
        build-essential \
        python3 \
        pkg-config \
+       gosu \
   && rm -rf /var/lib/apt/lists/*
+
+# Unprivileged user the workload runs as. The container still starts as root so
+# the entrypoint can chown the Railway volume (mounted root-owned at runtime),
+# then drops to `app` via gosu before exec-ing anything else.
+RUN useradd --system --create-home --home-dir /home/app \
+      --shell /usr/sbin/nologin --uid 10001 app
 
 RUN npm install -g @railway/cli && npm cache clean --force
 
@@ -32,10 +41,14 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY src ./src
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /data \
+  && chown -R app:app /app /data
 
-# We run as root so the entrypoint can mkdir/install into /data, which
-# Railway mounts as root-owned at runtime regardless of build-time chown.
+# The container enters as root so the entrypoint can chown /data (Railway mounts
+# the volume root-owned at runtime regardless of build-time chown), then the
+# entrypoint immediately drops to the unprivileged `app` user via gosu. The
+# long-running workload (wrapper + openclaw gateway + children) never runs as root.
 ENV PORT=8080
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
