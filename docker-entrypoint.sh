@@ -7,7 +7,14 @@ set -eu
 # into /data, pruning, and the Node wrapper itself — runs without root.
 if [ "$(id -u)" = "0" ]; then
   mkdir -p /data
-  chown -R app:app /data /home/app
+  # The /data volume's ROOT is remounted root-owned each boot, but its CONTENTS
+  # (created by the app user) keep app ownership. A full `chown -R /data` over the
+  # now-large volume (openclaw-runtime + workspace: thousands of files on a network
+  # volume) hangs long enough to blow the deploy/healthcheck window — it only worked
+  # on the very first boot, when /data was still empty. Chown just the mount root so
+  # app can write there; /home/app is small so it keeps the recursive chown.
+  chown app:app /data
+  chown -R app:app /home/app
   exec gosu app "$0" "$@"
 fi
 
