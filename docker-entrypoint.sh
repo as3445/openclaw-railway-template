@@ -1,30 +1,57 @@
 #!/bin/sh
 set -eu
-# ===== TEMPORARY DIAGNOSTIC ENTRYPOINT (bind :8080 first, then reproduce boot) =====
+
+# Railway mounts the /data volume root-owned at runtime, regardless of any
+# build-time chown. Fix ownership while we still have root, then re-exec this
+# same script as the unprivileged `app` user so everything below — npm installs
+# into /data, pruning, and the Node wrapper itself — runs without root.
 if [ "$(id -u)" = "0" ]; then
   mkdir -p /data
+  # /data holds a ~5GB persistent volume. Railway remounts its ROOT root-owned
+  # each boot, but the CONTENTS (created by the app user) keep app ownership, so a
+  # full `chown -R /data` over thousands of files on a network volume hangs long
+  # enough to blow the deploy/healthcheck window (the first boot only passed because
+  # /data was still empty). Chown just the mount root so app can write there.
   chown app:app /data
   exec gosu app "$0" "$@"
 fi
 
-# Bind the port immediately so Railway marks the deploy active + shell-able,
-# regardless of whether the real boot below hangs.
-node -e 'const p=process.env.PORT||8080;require("http").createServer((_q,r)=>{r.writeHead(200);r.end("diag\n")}).listen(p,()=>console.log("[diag] listening on "+p))' &
-KEEPALIVE=$!
+VERSION="${OPENCLAW_VERSION:-latest}"
+if [ "$VERSION" = "latest" ]; then
+  echo "[entrypoint] resolving latest openclaw version..."
+  VERSION="$(npm view openclaw version 2>/dev/null || true)"
+  if [ -z "$VERSION" ]; then
+    echo "[entrypoint] failed to resolve latest openclaw version" >&2
+    exit 1
+  fi
+fi
+echo "[entrypoint] openclaw version: $VERSION"
 
-# Reproduce the real boot IN THE BACKGROUND, logging each step to /tmp/boot.log,
-# so we can read exactly where it hangs via ssh without blocking the keepalive.
-(
-  echo "[boot] start $(date)"
-  VERSION="${OPENCLAW_VERSION:-latest}"
-  echo "[boot] VERSION=$VERSION"
-  PREFIX="/data/openclaw-runtime/$VERSION"
-  ENTRY="$PREFIX/lib/node_modules/openclaw/dist/entry.js"
-  echo "[boot] du -sh /data:"; du -sh /data 2>&1 | head
-  echo "[boot] ls /data:"; ls -la /data 2>&1 | head -30
-  echo "[boot] ENTRY exists?"; test -f "$ENTRY" && echo yes || echo no
-  echo "[boot] done $(date)"
-) > /tmp/boot.log 2>&1 &
+PREFIX="/data/openclaw-runtime/$VERSION"
+ENTRY="$PREFIX/lib/node_modules/openclaw/dist/entry.js"
 
-echo "[diag] keepalive pid=$KEEPALIVE; boot probe running -> /tmp/boot.log; idling"
-wait "$KEEPALIVE"
+if [ ! -f "$ENTRY" ]; then
+  echo "[entrypoint] installing openclaw@$VERSION into $PREFIX..."
+  mkdir -p "$PREFIX"
+  NPM_CONFIG_PREFIX="$PREFIX" npm install -g \
+    "openclaw@$VERSION" \
+    openclaw-plugin-google \
+    @honcho-ai/openclaw-honcho
+fi
+
+if [ ! -f "$ENTRY" ]; then
+  echo "[entrypoint] install failed: $ENTRY missing" >&2
+  exit 1
+fi
+
+if [ -d /data/openclaw-runtime ]; then
+  echo "[entrypoint] pruning old versions (keeping $VERSION)..."
+  find /data/openclaw-runtime -mindepth 1 -maxdepth 1 -type d \
+       ! -name "$VERSION" \
+       -exec rm -rf {} + 2>/dev/null || true
+fi
+
+export OPENCLAW_ENTRY="$ENTRY"
+echo "[entrypoint] OPENCLAW_ENTRY=$ENTRY"
+echo "[entrypoint] starting wrapper..."
+exec node src/server.js
