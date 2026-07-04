@@ -7,7 +7,12 @@ set -eu
 # into /data, pruning, and the Node wrapper itself — runs without root.
 if [ "$(id -u)" = "0" ]; then
   mkdir -p /data
-  chown -R app:app /data
+  # /data holds a ~5GB persistent volume. Railway remounts its ROOT root-owned
+  # each boot, but the CONTENTS (created by the app user) keep app ownership, so a
+  # full `chown -R /data` over thousands of files on a network volume hangs long
+  # enough to blow the deploy/healthcheck window (the first boot only passed because
+  # /data was still empty). Chown just the mount root so app can write there.
+  chown app:app /data
   exec gosu app "$0" "$@"
 fi
 
