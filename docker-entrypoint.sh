@@ -7,7 +7,7 @@ set -eu
 # into /data, pruning, and the Node wrapper itself — runs without root.
 if [ "$(id -u)" = "0" ]; then
   mkdir -p /data
-  chown -R app:app /data
+  chown -R app:app /data /home/app
   exec gosu app "$0" "$@"
 fi
 
