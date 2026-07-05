@@ -49,7 +49,8 @@ if [ ! -f "$ENTRY" ]; then
   NPM_CONFIG_PREFIX="$PREFIX" npm install -g \
     "openclaw@$VERSION" \
     openclaw-plugin-google \
-    @honcho-ai/openclaw-honcho
+    @honcho-ai/openclaw-honcho \
+    @openclaw/firecrawl-plugin
 fi
 
 if [ ! -f "$ENTRY" ]; then
