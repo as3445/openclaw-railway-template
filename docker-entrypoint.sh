@@ -21,6 +21,14 @@ if [ "$(id -u)" = "0" ]; then
   exec gosu app "$0" "$@"
 fi
 
+# Recovery: the persistent data volume is mounted at /data-recover (the volume
+# mount could not be moved back to /data). openclaw.json references absolute
+# /data/... paths, so symlink the expected locations to the restored data.
+if [ -d /data-recover/.openclaw ]; then
+  [ -e /data/.openclaw ] || ln -sfn /data-recover/.openclaw /data/.openclaw
+  [ -e /data/workspace ] || ln -sfn /data-recover/workspace /data/workspace
+fi
+
 VERSION="${OPENCLAW_VERSION:-latest}"
 if [ "$VERSION" = "latest" ]; then
   echo "[entrypoint] resolving latest openclaw version..."
