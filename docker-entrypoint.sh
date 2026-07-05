@@ -13,6 +13,11 @@ if [ "$(id -u)" = "0" ]; then
   # enough to blow the deploy/healthcheck window (the first boot only passed because
   # /data was still empty). Chown just the mount root so app can write there.
   chown app:app /data
+  # The image's npm cache (/home/app/.npm) can contain root-owned files from
+  # build-time global installs; the app user then can't write it and the on-boot
+  # `npm install openclaw` fails with EACCES. /home/app is small and image-local,
+  # so fix its ownership every boot.
+  chown -R app:app /home/app
   exec gosu app "$0" "$@"
 fi
 
