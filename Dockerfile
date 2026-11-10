@@ -1,6 +1,6 @@
 # Runtime image. openclaw is installed at startup into the persistent volume,
 # allowing version control via the OPENCLAW_VERSION environment variable.
-FROM node:22-bookworm
+FROM node:24-bookworm
 ENV NODE_ENV=production
 # Home for the unprivileged `app` user; npm/pnpm caches land here at runtime.
 ENV HOME=/home/app
